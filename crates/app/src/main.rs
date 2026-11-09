@@ -2,15 +2,17 @@
 //! and carries out what the planner returns. Everything runs on the main thread.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod logging;
 mod logic;
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use breaks::until_morning;
 use commands::Command;
 use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
 use settings::Settings;
+use tracing::{error, info};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -59,9 +61,13 @@ fn main() {
         let args: Vec<String> = std::env::args().skip(1).collect();
         return run_second_instance(&args);
     }
+    if let Some(folder) = app_folder() {
+        logging::start(&log_path(&folder));
+    }
+    info!(version = env!("CARGO_PKG_VERSION"), "starting");
     let settings = load_settings();
     if let Err(error) = toast::register(APP_ID, "Stretch") {
-        eprintln!("toast registration failed: {error}");
+        error!(%error, "toast registration failed");
     }
     let signals =
         SignalWindow::new(|signal| with_app(|app| app.on_signal(signal))).expect("signal window");
@@ -97,7 +103,11 @@ fn main() {
 
 impl App {
     fn on_signal(&mut self, signal: Signal) {
+        if signal != Signal::Timer {
+            info!(?signal, "signal");
+        }
         for toast in self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows) {
+            info!(title = %toast.title, "toast");
             toast::show(
                 APP_ID,
                 &toast.title,
@@ -109,6 +119,7 @@ impl App {
     }
 
     fn on_menu(&mut self, action: MenuAction) {
+        info!(?action, "menu");
         if action == MenuAction::Quit {
             return platform::quit();
         }
@@ -141,8 +152,10 @@ fn run_second_instance(args: &[String]) {
     match command.name.as_str() {
         "help" => println!("{}", commands::HELP),
         "version" => println!("Stretch version {}", env!("CARGO_PKG_VERSION")),
-        // shortcut: no log file until `tracing` lands; print its path then.
-        "logs" => println!("Stretch keeps no log file yet."),
+        "logs" => match app_folder() {
+            Some(folder) => println!("{}", log_path(&folder).display()),
+            None => eprintln!("APPDATA is not set, so there is no log file"),
+        },
         _ => {
             let taken = platform::running_app_window()
                 .is_some_and(|window| platform::send_command(window, args));
@@ -180,14 +193,29 @@ fn tray_icon(paused: bool) -> Icon {
     Icon::from_rgba(colour.repeat(16 * 16), 16, 16).expect("tray icon image")
 }
 
+/// `%APPDATA%\stretch-core`, where the config and the logs live.
+fn app_folder() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|app_data| PathBuf::from(app_data).join("stretch-core"))
+}
+
+fn log_path(app_folder: &Path) -> PathBuf {
+    app_folder.join("logs").join("main.log")
+}
+
 fn load_settings() -> Settings {
-    let Some(app_data) = std::env::var_os("APPDATA").map(PathBuf::from) else {
+    let Some(folder) = app_folder() else {
         return Settings::default();
     };
-    let own = app_data.join("stretch-core").join("config.json");
-    let stretchly = app_data.join("Stretchly").join("config.json");
-    Settings::load_or_import(&own, &stretchly).unwrap_or_else(|error| {
-        eprintln!("using defaults, {}: {error}", own.display());
-        Settings::default()
-    })
+    let own = folder.join("config.json");
+    let stretchly = folder.with_file_name("Stretchly").join("config.json");
+    match Settings::load_or_import(&own, &stretchly) {
+        Ok(settings) => {
+            info!(path = %own.display(), "settings loaded");
+            settings
+        }
+        Err(error) => {
+            error!(path = %own.display(), %error, "settings unreadable, using defaults");
+            Settings::default()
+        }
+    }
 }

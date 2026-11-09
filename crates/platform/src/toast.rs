@@ -39,6 +39,8 @@ pub fn show(app_id: &str, title: &str, text: &str, silent: bool) {
         if silent {
             toast = toast.sound(None);
         }
-        let _ = toast.show();
+        if let Err(error) = toast.show() {
+            tracing::warn!(%error, "toast failed");
+        }
     });
 }

@@ -47,7 +47,7 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 | Autostart | `app.setLoginItemSettings`; Store build uses StartupTask | `HKCU\...\Run` value; MSIX `StartupTask` if we ship MSIX |
 | Single instance + CLI commands | `requestSingleInstanceLock`, `second-instance` argv | Named mutex + WM_COPYDATA to the hidden signal window |
 | Break windows on all/primary/cursor display, top-most, not focusable, kiosk/fullscreen | `BrowserWindow` per display | Window placement and z-order rules belong to the core/UI contract; drawing belongs to the UI host |
-| Logs | `electron-log` | `tracing` to a rolling file |
+| Logs | `electron-log` | `tracing` to `%APPDATA%\stretch-core\logs\main.log`, moved to `main.old.log` past 1 MB at start, as electron-log |
 | Open URL / folder | `shell.openExternal` | `ShellExecuteW` |
 
 ## 4. Data

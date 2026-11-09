@@ -55,7 +55,7 @@ Versions are pinned at scaffold time.
 | Single instance + CLI forwarding | none (Win32) | Named mutex finds the running app; the second process sends its arguments to the app's hidden window with WM_COPYDATA. No crate, no pipe thread, and the command runs on the UI thread like every other signal |
 | Autostart | `auto-launch` | `HKCU\...\Run` |
 | Paths, atomic save | std only: `%APPDATA%`, `fs::rename` over a synced temporary file | Save never leaves a half-written file; no crate needed for a few lines |
-| Logs | `tracing`, `tracing-subscriber`, `tracing-appender` | Rolling log file |
+| Logs | `tracing`, `tracing-subscriber` (fmt only) | `main.log` plus `main.old.log` past 1 MB, as electron-log; `tracing-appender` rolls by time only, so a few lines of std do the size check |
 | Errors | `thiserror` (modules), `anyhow` (`app`) | |
 | Time | `jiff`, `sunrise` (+ `chrono`, required by `sunrise`) | |
 | Localized time-remaining text | ICU4X `DurationFormatter` (`icu_experimental`) | CLDR plural rules for all locales; API may still change |
