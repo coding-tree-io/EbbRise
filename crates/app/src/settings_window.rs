@@ -16,7 +16,6 @@ use crate::{App, app_folder, log_path, sync_autostart, with_app};
 const TITLE: &str = "Ebb settings";
 /// The window's ground colour in dark and light mode, for its title bar.
 const GROUND: [u32; 2] = [0x16130E, 0xFAF6EE];
-const WEBSITE: &str = "https://hovancik.net/stretchly";
 
 impl App {
     /// Opens the settings window, or brings the open one to the front.
@@ -46,7 +45,6 @@ impl App {
                     .and_then(Path::parent),
             )
         });
-        window.on_open_website(|| open(Some(Path::new(WEBSITE))));
         window.on_dark_mode_changed(colour_title_bar);
         window.on_restore_defaults(|| with_app(|app| app.change_settings(Settings::default())));
         window.window().on_close_requested(|| {
@@ -224,7 +222,7 @@ fn sound_files(folder: &Path) -> Vec<String> {
     names
 }
 
-/// Opens a folder in Explorer, or a web address in the default browser.
+/// Opens a folder in Explorer.
 fn open(target: Option<&Path>) {
     let Some(target) = target else {
         return;

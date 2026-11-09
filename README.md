@@ -16,4 +16,10 @@ Stage: platform-free core done and tested (`settings`, `breaks`, `commands`). Wi
 
 ## Licence
 
-Stretchly is BSD-2-Clause. This port is a derivative work, so it keeps Stretchly's copyright notice in [LICENSE-STRETCHLY](LICENSE-STRETCHLY). Our own licence is not chosen yet.
+Ebb's own code is [0BSD](LICENSE): use it for anything, with no conditions. Ebb is a port of [Stretchly](https://github.com/hovancik/stretchly), which is BSD-2-Clause, so the ported parts keep Stretchly's notice in [LICENSE-STRETCHLY](LICENSE-STRETCHLY) (SPDX for each crate: `0BSD AND BSD-2-Clause`).
+
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) holds Stretchly's notice and the licence of every crate in the exe. Every release ships `LICENSE`, `LICENSE-STRETCHLY` and `THIRD-PARTY-NOTICES.txt` next to the exe; that is how the binary meets BSD-2-Clause and the crate licences, so the app itself does not name Stretchly. After a dependency change, run `python -I scripts/third_party_notices.py` again.
+
+The UI uses [Slint](https://slint.dev) under its Royalty-free Desktop Application License 2.0. That licence asks for the badge below on the public page the exe is downloaded from (this README and the releases page), instead of an About screen in the app. Forks that ship binaries must do the same, or choose one of Slint's other licences.
+
+[![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)

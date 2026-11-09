@@ -4,6 +4,8 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
+# Our code is 0BSD; the parts ported from Stretchly keep its BSD-2-Clause notice (LICENSE-STRETCHLY).
+license = "0BSD AND BSD-2-Clause"
 
 [profile.release]
 lto = "fat"

@@ -170,7 +170,6 @@ export component SettingsWindow inherits Window {
     callback play(int);
     callback open-audio-folder();
     callback open-logs();
-    callback open-website();
     callback restore-defaults();
     // The title bar must follow a Windows theme switch while the window is open.
     callback dark-mode-changed(bool);
@@ -560,7 +559,7 @@ export component SettingsWindow inherits Window {
                 }
             }
             Text {
-                text: "Break reminders for Windows, built on Stretchly's break planner. Every break idea names the study behind it.";
+                text: "Break reminders for Windows. Every break idea names the study behind it.";
                 wrap: word-wrap;
                 color: Palette.text-secondary;
             }
@@ -571,11 +570,6 @@ export component SettingsWindow inherits Window {
                     text: "Open logs folder";
                     compact: true;
                     clicked => { root.open-logs(); }
-                }
-                PillButton {
-                    text: "Stretchly website";
-                    compact: true;
-                    clicked => { root.open-website(); }
                 }
             }
             Rectangle { height: 12px; }
