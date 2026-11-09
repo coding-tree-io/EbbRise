@@ -7,7 +7,7 @@ use crate::locales::LOCALES;
 const FALLBACK: &str = "en";
 /// The app's own name replaces Stretchly's in every text.
 const UPSTREAM_NAME: &str = "Stretchly";
-const APP_NAME: &str = "Stretch";
+const APP_NAME: &str = "Ebb";
 const NESTING_START: &str = "$t(";
 
 /// One language of the app, with English for missing texts, as upstream's i18next setup.
@@ -188,7 +188,7 @@ mod tests {
             english.with("main.miniBreakIn", &[("seconds", "1")]),
             "Mini break in 1 second"
         );
-        assert_eq!(english.text("main.quitStretchly"), "Quit Stretch");
+        assert_eq!(english.text("main.quitStretchly"), "Quit Ebb");
         assert_eq!(english.text("no.such.key"), "no.such.key");
     }
 

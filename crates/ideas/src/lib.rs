@@ -1,16 +1,20 @@
 //! Break ideas: the words a break shows, picked as upstream's `loadIdeas` and `Shuffled`.
+//! The built-in ideas are our own evidence-based set, not Stretchly's.
+
+mod evidence;
 
 use fastrand::Rng;
-use i18n::Translator;
 use settings::Settings;
 
-/// The words a break shows. A Mini break shows only `text`.
+/// The words a break shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BreakIdea {
-    /// Long break title; empty for a Mini break.
+    /// The action, shown as the headline; may be empty for the user's own Mini break ideas.
     pub title: String,
-    /// The idea itself.
+    /// What the break is about: the finding behind the action, or the user's own words.
     pub text: String,
+    /// The study behind the idea; empty for the user's own ideas.
+    pub source: String,
 }
 
 /// Items in random order; no item comes again before every other item came once.
@@ -48,13 +52,13 @@ pub struct Ideas {
 }
 
 impl Ideas {
-    /// The user's enabled ideas when `useIdeasFromSettings` is on, else the built-in ideas in
-    /// the translator's language. With `ideas` off, every break gets empty words.
-    pub fn load(settings: &Settings, translator: &Translator, mut rng: Rng) -> Self {
+    /// The user's enabled ideas when `useIdeasFromSettings` is on, else the built-in
+    /// evidence-based ideas. With `ideas` off, every break gets empty words.
+    pub fn load(settings: &Settings, mut rng: Rng) -> Self {
         let (mini, long) = match (settings.ideas, settings.use_ideas_from_settings) {
             (false, _) => (Vec::new(), Vec::new()),
             (true, true) => from_settings(settings),
-            (true, false) => built_in(translator),
+            (true, false) => built_in(),
         };
         Self {
             mini: Deck::new(mini, rng.fork()),
@@ -79,8 +83,8 @@ fn from_settings(settings: &Settings) -> (Vec<BreakIdea>, Vec<BreakIdea>) {
         .iter()
         .filter(|idea| idea.enabled)
         .map(|idea| BreakIdea {
-            title: String::new(),
             text: idea.data.clone(),
+            ..BreakIdea::default()
         });
     let long = settings
         .long_break_ideas
@@ -89,28 +93,24 @@ fn from_settings(settings: &Settings) -> (Vec<BreakIdea>, Vec<BreakIdea>) {
         .map(|idea| BreakIdea {
             title: idea.data.first().cloned().unwrap_or_default(),
             text: idea.data.get(1).cloned().unwrap_or_default(),
+            source: String::new(),
         });
     (mini.collect(), long.collect())
 }
 
-/// The ids come from the English file, so a language with fewer ideas shows the missing
-/// ones in English, as upstream.
-fn built_in(translator: &Translator) -> (Vec<BreakIdea>, Vec<BreakIdea>) {
-    let mini = translator
-        .english_keys("miniBreakIdeas")
-        .into_iter()
-        .map(|id| BreakIdea {
-            title: String::new(),
-            text: translator.text(&format!("miniBreakIdeas.{id}.text")),
-        });
-    let long = translator
-        .english_keys("longBreakIdeas")
-        .into_iter()
-        .map(|id| BreakIdea {
-            title: translator.text(&format!("longBreakIdeas.{id}.title")),
-            text: translator.text(&format!("longBreakIdeas.{id}.text")),
-        });
-    (mini.collect(), long.collect())
+/// The evidence-based ideas in [`evidence`]: the action as the title, the finding as the text.
+fn built_in() -> (Vec<BreakIdea>, Vec<BreakIdea>) {
+    let ideas = |entries: &[(&str, &str, &str)]| {
+        entries
+            .iter()
+            .map(|(title, text, source)| BreakIdea {
+                title: (*title).to_owned(),
+                text: (*text).to_owned(),
+                source: (*source).to_owned(),
+            })
+            .collect()
+    };
+    (ideas(evidence::MINI), ideas(evidence::LONG))
 }
 
 #[cfg(test)]
@@ -134,7 +134,7 @@ mod tests {
                 .into(),
             ..Settings::default()
         };
-        let mut ideas = Ideas::load(&settings, &Translator::new("en"), Rng::with_seed(7));
+        let mut ideas = Ideas::load(&settings, Rng::with_seed(7));
         for _ in 0..3 {
             let mut round = mini_texts(&mut ideas, 3);
             round.sort();
@@ -143,29 +143,15 @@ mod tests {
     }
 
     #[test]
-    fn built_in_ideas_follow_the_language_and_fill_gaps_in_english() {
-        let english = Translator::new("en");
-        let english_count = english.english_keys("longBreakIdeas").len();
-        // Polish translates fewer Long break ideas than English has.
-        let mut ideas = Ideas::load(
-            &Settings::default(),
-            &Translator::new("pl"),
-            Rng::with_seed(1),
-        );
-        let round: Vec<BreakIdea> = (0..english_count).map(|_| ideas.next_long()).collect();
-        let in_english = |idea: &&BreakIdea| {
-            english
-                .english_keys("longBreakIdeas")
-                .iter()
-                .any(|id| english.text(&format!("longBreakIdeas.{id}.title")) == idea.title)
-        };
-        let english_titles = round.iter().filter(in_english).count();
-        assert!(english_titles > 0 && english_titles < english_count);
-        assert!(
-            round
-                .iter()
-                .all(|idea| !idea.title.is_empty() && !idea.text.is_empty())
-        );
+    fn every_built_in_idea_names_its_action_finding_and_source() {
+        let mut ideas = Ideas::load(&Settings::default(), Rng::with_seed(1));
+        let mut all: Vec<BreakIdea> = (0..evidence::MINI.len())
+            .map(|_| ideas.next_mini())
+            .collect();
+        all.extend((0..evidence::LONG.len()).map(|_| ideas.next_long()));
+        for idea in all {
+            assert!(!idea.title.is_empty() && !idea.text.is_empty() && !idea.source.is_empty());
+        }
     }
 
     #[test]
@@ -174,7 +160,7 @@ mod tests {
             ideas: false,
             ..Settings::default()
         };
-        let mut ideas = Ideas::load(&settings, &Translator::new("en"), Rng::with_seed(1));
+        let mut ideas = Ideas::load(&settings, Rng::with_seed(1));
         assert_eq!(ideas.next_long(), BreakIdea::default());
         assert_eq!(ideas.next_mini(), BreakIdea::default());
     }

@@ -3,9 +3,10 @@
 use breaks::{BreaksPlanner, Event, Settings};
 
 #[test]
-fn mini_and_long_break_order() {
+fn long_breaks_keep_their_own_clock() {
     let settings = Settings {
         mini_break_interval: 100,
+        long_break_every: 300,
         mini_break_duration: 10,
         long_break_duration: 10,
         mini_break_notification: false,
@@ -16,7 +17,12 @@ fn mini_and_long_break_order() {
     for (start, expected) in [
         (100, Event::StartMiniBreak),
         (210, Event::StartMiniBreak),
+        // Due at 300, before the middle of the wait after the 320 Mini break: takes its place.
         (320, Event::StartLongBreak),
+        // Both clocks restart at 330: Mini at 430, Long due at 630.
+        (430, Event::StartMiniBreak),
+        (540, Event::StartMiniBreak),
+        (650, Event::StartLongBreak),
     ] {
         assert_eq!(planner.advance(start), vec![expected]);
         planner.advance(start + 10);
@@ -27,6 +33,7 @@ fn mini_and_long_break_order() {
 fn enabled_break_types_control_the_schedule() {
     let base = Settings {
         mini_break_interval: 100,
+        long_break_every: 300,
         mini_break_notification: false,
         long_break_notification: false,
         ..Settings::default()
@@ -57,6 +64,21 @@ fn enabled_break_types_control_the_schedule() {
         0,
     );
     assert!(neither.advance(1000).is_empty());
+}
+
+#[test]
+fn long_breaks_alone_come_every_long_break_every() {
+    let settings = Settings {
+        mini_break: false,
+        long_break_every: 2_700_000,
+        long_break_duration: 180_000,
+        long_break_notification: false,
+        ..Settings::default()
+    };
+    let mut planner = BreaksPlanner::new(settings, 0);
+    assert_eq!(planner.advance(2_700_000), vec![Event::StartLongBreak]);
+    assert_eq!(planner.advance(2_880_000), vec![Event::FinishLongBreak]);
+    assert_eq!(planner.deadline(), Some(5_580_000));
 }
 
 #[test]
@@ -97,9 +119,10 @@ fn postpone_keeps_notification_and_enforces_limit() {
 }
 
 #[test]
-fn skip_to_break_preserves_following_order() {
+fn skip_to_long_restarts_the_long_clock() {
     let settings = Settings {
         mini_break_interval: 100,
+        long_break_every: 300,
         mini_break_duration: 10,
         long_break_duration: 10,
         mini_break_notification: false,
@@ -116,6 +139,7 @@ fn skip_to_break_preserves_following_order() {
     planner.skip_to_mini(220, None);
     assert_eq!(planner.advance(320), vec![Event::StartMiniBreak]);
     planner.advance(330);
+    // Long due at 110 + 300 = 410: takes the place of the 430 Mini break.
     assert_eq!(planner.advance(430), vec![Event::StartLongBreak]);
 }
 

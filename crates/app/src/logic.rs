@@ -4,6 +4,7 @@
 mod break_screen;
 mod command;
 mod menu;
+mod settings_form;
 mod status;
 
 use breaks::{BreakTime, BreaksPlanner, Event};
@@ -15,12 +16,13 @@ use settings::Settings;
 
 pub use break_screen::{BreakButton, BreakScreen, countdown, ring_commands};
 pub use menu::{MenuAction, MenuEntry};
+pub use settings_form::{BreakForm, SettingsForm};
 
 /// How often to check for the user's return while they are away (no input event exists for that).
 const AWAY_CHECK_MS: i64 = 2_000;
 const FOCUS_ASSIST_UNSUPPORTED: i32 = -1;
 /// The sound name that means "play nothing".
-const SILENCE: &str = "silence";
+pub const SILENCE: &str = "silence";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toast {
@@ -38,6 +40,8 @@ pub enum Effect {
     ShowBreak(BreakScreen),
     /// Close the break window.
     CloseBreak,
+    /// Open the settings window (the `preferences` command).
+    OpenSettings,
 }
 
 /// The next timer: fire after `delay` ms; Windows may shift it by `tolerance` ms to batch wake-ups.
@@ -76,7 +80,7 @@ impl Core {
     /// `focus_assist` is the value at start, `None` when Windows cannot report it.
     pub fn new(settings: Settings, now: i64, focus_assist: Option<i32>) -> Self {
         let words = Translator::new(&settings.language);
-        let ideas = Ideas::load(&settings, &words, Rng::new());
+        let ideas = Ideas::load(&settings, Rng::new());
         let mut planner = BreaksPlanner::new(settings, now);
         planner.focus_assist(now, focus_assist.unwrap_or(FOCUS_ASSIST_UNSUPPORTED));
         Self {
@@ -116,7 +120,7 @@ impl Core {
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
             Signal::Resume | Signal::Unlock => self.planner.wake(now),
             Signal::FocusAssist(value) => self.planner.focus_assist(now, value),
-            Signal::Command(args) => self.on_command(&args, now, os),
+            Signal::Command(args) => return self.on_command(&args, now, os),
         }
         Vec::new()
     }
@@ -216,9 +220,12 @@ impl Core {
             self.ideas.next_mini()
         };
         let idea = match self.next_idea.take() {
+            // The given words replace the whole idea: a built-in finding and source would not
+            // match them.
             Some(words) => BreakIdea {
-                title: words.title.unwrap_or(picked.title),
-                text: words.text.unwrap_or(picked.text),
+                title: words.title.unwrap_or_default(),
+                text: words.text.unwrap_or_default(),
+                source: String::new(),
             },
             None => picked,
         };
@@ -244,8 +251,16 @@ impl Core {
             MenuAction::SkipToMini => self.planner.skip_to_mini(now, None),
             MenuAction::SkipToLong => self.planner.skip_to_long(now, None),
             MenuAction::Reset => self.planner.reset(now),
-            MenuAction::Resume | MenuAction::Quit => {}
+            MenuAction::Resume | MenuAction::Preferences | MenuAction::Quit => {}
         }
+    }
+
+    /// Applies settings changed in the settings window; a new language applies to new texts.
+    pub fn set_settings(&mut self, settings: Settings, now: i64) {
+        if settings.language != self.settings().language {
+            self.words = Translator::new(&settings.language);
+        }
+        self.planner.set_settings(settings, now);
     }
 
     /// The tray menu for the current state.
@@ -462,6 +477,7 @@ mod tests {
                     self.window_open = true;
                 }
                 Effect::CloseBreak => self.window_open = false,
+                Effect::OpenSettings => self.log.push((self.now, "settings".to_owned())),
             }
         }
 
@@ -507,7 +523,7 @@ mod tests {
         assert_eq!(
             status(&sim.core, 0),
             "Next Mini break in about 1 minute
-Next Long break after 2 Mini breaks"
+Next Long break in about 2 minutes"
         );
         sim.run_until(130_000);
         assert_eq!(
@@ -739,10 +755,21 @@ Next Long break after 2 Mini breaks"
             log(&[
                 (20_000, "Mini break in 10 seconds"),
                 (30_000, "Mini break"),
-                // Finished at 50 s, so the next break is 30 s later.
-                (70_000, "Mini break in 10 seconds"),
+                // Finished at 50 s, so the next break is 30 s later. The Long break, due at
+                // 90 s, takes its place.
+                (70_000, "Long break in 10 seconds"),
             ])
         );
+    }
+
+    #[test]
+    fn commands_press_break_buttons_and_open_settings() {
+        let mut sim = Sim::new(r#","miniBreakPostpone":false"#);
+        sim.run_until(31_000);
+        sim.command(&["skip"]);
+        assert!(!sim.window_open);
+        sim.command(&["preferences"]);
+        assert_eq!(sim.log.last(), Some(&(31_000, "settings".to_owned())));
     }
 
     #[test]

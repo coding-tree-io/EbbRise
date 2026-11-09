@@ -223,6 +223,7 @@ dependencies = [
  "ideas",
  "jiff",
  "platform",
+ "resvg",
  "settings",
  "slint",
  "slint-build",
@@ -2255,7 +2256,6 @@ name = "ideas"
 version = "0.1.0"
 dependencies = [
  "fastrand",
- "i18n",
  "settings",
 ]
 

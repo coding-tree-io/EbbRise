@@ -1,5 +1,5 @@
-//! The tray menu, as upstream's `getTrayMenuTemplate`, without Preferences (needs a window)
-//! and without shortcut labels (global hotkeys are not ported).
+//! The tray menu, as upstream's `getTrayMenuTemplate`, without shortcut labels (global
+//! hotkeys are not ported).
 
 use breaks::{BreaksPlanner, Event};
 use i18n::Translator;
@@ -17,6 +17,8 @@ pub enum MenuAction {
     SkipToMini,
     SkipToLong,
     Reset,
+    /// Open the settings window.
+    Preferences,
     Quit,
 }
 
@@ -33,6 +35,7 @@ impl MenuAction {
             Self::SkipToMini => "skip-mini",
             Self::SkipToLong => "skip-long",
             Self::Reset => "reset",
+            Self::Preferences => "preferences",
             Self::Quit => "quit",
         };
         id.to_owned()
@@ -49,6 +52,7 @@ impl MenuAction {
             Self::SkipToMini,
             Self::SkipToLong,
             Self::Reset,
+            Self::Preferences,
             Self::Quit,
         ]
         .into_iter()
@@ -124,6 +128,7 @@ pub(super) fn tray_menu(planner: &BreaksPlanner, words: &Translator, now: i64) -
         menu.push(item(MenuAction::Reset, "main.resetBreaks"));
     }
     menu.push(MenuEntry::Separator);
+    menu.push(item(MenuAction::Preferences, "main.preferences"));
     menu.push(item(MenuAction::Quit, "main.quitStretchly"));
     menu
 }
@@ -180,13 +185,14 @@ mod tests {
             labels(&tray_menu(&running, &words, 0)),
             [
                 "Next Mini break in about 10 minutes",
-                "Next Long break after 2 Mini breaks",
+                "Next Long break in about 30 minutes",
                 "-",
                 "Skip to the next [Mini break, Long break]",
                 "Pause breaks [30 minutes, 2 hours, Until morning, -, Indefinitely]",
                 "Reset breaks",
                 "-",
-                "Quit Stretch",
+                "Preferences",
+                "Quit Ebb",
             ]
         );
         running.pause(0, BreaksPlanner::INDEFINITELY);
@@ -197,7 +203,8 @@ mod tests {
                 "-",
                 "Resume breaks",
                 "-",
-                "Quit Stretch"
+                "Preferences",
+                "Quit Ebb"
             ]
         );
     }
@@ -225,6 +232,7 @@ mod tests {
             MenuAction::SkipToMini,
             MenuAction::SkipToLong,
             MenuAction::Reset,
+            MenuAction::Preferences,
             MenuAction::Quit,
         ];
         for action in actions {

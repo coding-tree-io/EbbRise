@@ -75,7 +75,6 @@ impl BreaksPlanner {
             // Upstream `clear()` drops the pending step, so the ended break no longer counts as running.
             self.next = Event::StartMiniBreak;
             self.deadline = None;
-            self.break_number = 0;
             self.postpones = 0;
             finished.into_iter().collect()
         } else {

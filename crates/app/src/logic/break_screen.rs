@@ -15,8 +15,10 @@ pub struct BreakScreen {
     /// "Mini break" or "Long break", in the user's language.
     pub kind: String,
     pub headline: String,
-    /// The idea's text under a Long break's title; empty for Mini breaks.
+    /// The idea's text under its title; empty when the idea has only a text.
     pub detail: String,
+    /// The study behind the idea; empty for the user's own ideas.
+    pub source: String,
     pub postpone: String,
     pub skip: String,
     pub finish: String,
@@ -31,7 +33,7 @@ pub enum BreakButton {
 }
 
 impl BreakScreen {
-    /// Mini ideas have only a text; Long ideas have a title and a text.
+    /// An idea with a title shows it as the headline and its text under it.
     pub(super) fn new(words: &Translator, long: bool, idea: BreakIdea) -> Self {
         let (headline, detail) = if idea.title.is_empty() {
             (idea.text, String::new())
@@ -47,6 +49,7 @@ impl BreakScreen {
             kind: words.text(kind),
             headline,
             detail,
+            source: idea.source,
             postpone: words.text("break.postpone"),
             skip: words.text("break.skip"),
             finish: words.text("break.finish"),
@@ -141,6 +144,7 @@ mod tests {
         let idea = |title: &str, text: &str| BreakIdea {
             title: title.into(),
             text: text.into(),
+            source: "Dunstan et al., 2012".into(),
         };
         let long = BreakScreen::new(&words, true, idea("Walk", "Stand up and walk."));
         assert_eq!(
@@ -148,6 +152,7 @@ mod tests {
             ("Long break", "Walk")
         );
         assert_eq!(long.detail, "Stand up and walk.");
+        assert_eq!(long.source, "Dunstan et al., 2012");
         let mini = BreakScreen::new(&words, false, idea("", "Look far away."));
         assert_eq!(
             (mini.headline.as_str(), mini.detail.as_str()),

@@ -1,101 +1,12 @@
 // Break window, design "B1 · Ring, centred · chosen palette".
-// Colours: OKLCH ramps (neutral hue 160, accent hue 155) written as hex; contrast measured
-// on the glow, the lightest ground: text 12.9:1, secondary 8.3:1, accent label 7.0:1.
 
-global Palette {
-    out property <color> ground: #0F1612;
-    out property <color> glow: #192E21;
-    out property <color> ring-track: #2E3531;
-    out property <color> ring-light: #ABF1C3;
-    out property <color> ring-deep: #67A97F;
-    out property <color> text: #EBF4EF;
-    out property <color> text-secondary: #BEC7C1;
-    out property <color> accent: #79C594;
-    out property <color> accent-hover: #89DDA7;
-    out property <color> on-accent: #0F1612;
-    out property <color> button: #181F1B;
-    out property <color> button-hover: #222824;
-    out property <color> button-border: #6C746F;
-    out property <color> focus: #89DDA7;
-}
-
-// Icon strokes in a 24 × 24 view box.
-component Icon inherits Path {
-    width: 16px;
-    height: 16px;
-    viewbox-width: 24;
-    viewbox-height: 24;
-    stroke-width: 1.8px;
-    stroke-line-cap: round;
-    stroke-line-join: round;
-}
-
-component PillButton inherits Rectangle {
-    in property <string> text;
-    in property <bool> primary;
-    in property <string> icon;
-    callback clicked();
-
-    accessible-role: button;
-    accessible-label: root.text;
-    accessible-action-default => { root.clicked(); }
-    height: 44px;
-    border-radius: self.height / 2;
-    background: root.primary
-        ? (touch.has-hover ? Palette.accent-hover : Palette.accent)
-        : (touch.has-hover ? Palette.button-hover : Palette.button);
-    border-width: root.primary ? 0 : 1px;
-    border-color: Palette.button-border;
-    animate background { duration: 120ms; }
-
-    HorizontalLayout {
-        padding-left: 22px;
-        padding-right: 22px;
-        spacing: 8px;
-        VerticalLayout {
-            alignment: center;
-            Icon {
-                commands: root.icon;
-                stroke: root.primary ? Palette.on-accent : Palette.text;
-            }
-        }
-        Text {
-            text: root.text;
-            vertical-alignment: center;
-            font-size: 15px;
-            font-weight: root.primary ? 600 : 400;
-            color: root.primary ? Palette.on-accent : Palette.text;
-        }
-    }
-    // Focus ring, 2 px outside the pill.
-    Rectangle {
-        x: -4px;
-        y: -4px;
-        width: parent.width + 8px;
-        height: parent.height + 8px;
-        border-radius: self.height / 2;
-        border-width: focus.has-focus ? 2px : 0;
-        border-color: Palette.focus;
-    }
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-    focus := FocusScope {
-        key-pressed(event) => {
-            if (event.text == " " || event.text == Key.Return) {
-                root.clicked();
-                return accept;
-            }
-            reject
-        }
-    }
-}
+import { Palette, PillButton } from "widgets.slint";
 
 export component BreakWindow inherits Window {
     in property <string> kind;
     in property <string> headline;
     in property <string> detail;
+    in property <string> source;
     in property <string> number;
     in property <string> caption;
     // SVG path commands for the arc of time left, in the ring's 236 × 236 view box.
@@ -111,6 +22,7 @@ export component BreakWindow inherits Window {
     callback finish();
 
     title: root.kind;
+    icon: @image-url("icons/ebb.svg");
     no-frame: true;
     always-on-top: true;
     default-font-family: "Segoe UI Variable Text";
@@ -160,9 +72,8 @@ export component BreakWindow inherits Window {
                     Text {
                         text: root.number;
                         horizontal-alignment: center;
-                        font-family: "Segoe UI Variable Display";
                         font-size: 80px;
-                        font-weight: 200;
+                        font-weight: 300;
                         color: Palette.text;
                     }
                     Text {
@@ -192,7 +103,6 @@ export component BreakWindow inherits Window {
                     text: root.headline;
                     horizontal-alignment: center;
                     wrap: word-wrap;
-                    font-family: "Segoe UI Variable Display";
                     font-size: 32px;
                     font-weight: 600;
                     color: Palette.text;
@@ -209,6 +119,12 @@ export component BreakWindow inherits Window {
                     color: Palette.text-secondary;
                     max-width: 620px;
                 }
+            }
+            if root.source != "": Text {
+                text: root.source;
+                horizontal-alignment: center;
+                font-size: 12px;
+                color: Palette.text-source;
             }
         }
 

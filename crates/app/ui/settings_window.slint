@@ -1,0 +1,604 @@
+// Settings window, design "S2 · Custom widgets in the B1 palette".
+// Every change calls `changed()` at once; the app saves it (upstream has no Save button).
+
+import { Palette, Icon, KeyFocus, PillButton, RoundButton, Switch, Stepper, Segmented, Dropdown, Slider } from "widgets.slint";
+
+component NavItem inherits Rectangle {
+    in property <string> text;
+    in property <string> icon;
+    in property <bool> current;
+    callback clicked();
+
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-checked: root.current;
+    accessible-action-default => { root.clicked(); }
+    height: 38px;
+    border-radius: 19px;
+    background: root.current ? Palette.card : (touch.has-hover ? Palette.ground : transparent);
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                commands: root.icon;
+                stroke: root.current ? Palette.accent : Palette.text-secondary;
+            }
+        }
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            font-weight: root.current ? 600 : 400;
+            color: root.current ? Palette.text : Palette.text-secondary;
+        }
+    }
+    Rectangle {
+        x: -4px;
+        y: -4px;
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        border-radius: self.height / 2;
+        border-width: focus.shown ? 2px : 0;
+        border-color: Palette.focus;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := KeyFocus {
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+}
+
+component SectionLabel inherits Text {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    color: Palette.accent;
+}
+
+component Card inherits Rectangle {
+    background: Palette.card;
+    border-width: 1px;
+    border-color: Palette.divider;
+    border-radius: 12px;
+    VerticalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        @children
+    }
+}
+
+// One grid row: a stretching label column and a fixed control column, so every control
+// ends on the same right edge in every card.
+component Row inherits Rectangle {
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> last;
+    min-height: root.hint == "" ? 52px : 56px;
+    HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: Palette.text;
+                overflow: elide;
+            }
+            if root.hint != "": Text {
+                text: root.hint;
+                overflow: elide;
+                font-size: 12px;
+                color: Palette.text-secondary;
+            }
+        }
+        // Centred as a whole, so every control lines up with the label column.
+        VerticalLayout {
+            width: 280px;
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                spacing: 12px;
+                @children
+            }
+        }
+    }
+    if !root.last: Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Palette.divider;
+    }
+}
+
+component Centre inherits VerticalLayout {
+    alignment: center;
+}
+
+component PageTitle inherits Text {
+    font-size: 28px;
+    font-weight: 600;
+    color: Palette.text;
+}
+
+export component SettingsWindow inherits Window {
+    // For the title bar, which Windows draws.
+    out property <bool> dark-mode: Palette.dark;
+    in-out property <int> page;
+    // General
+    in-out property <bool> fullscreen;
+    in-out property <bool> ideas;
+    in-out property <bool> natural-breaks;
+    in-out property <bool> open-at-login;
+    in-out property <bool> monitor-dnd;
+    in property <[string]> languages;
+    in-out property <int> language;
+    // Schedule
+    in-out property <bool> mini-on;
+    in-out property <int> mini-every;
+    in-out property <int> mini-length;
+    in-out property <bool> mini-notify;
+    in-out property <bool> mini-strict;
+    in-out property <bool> long-on;
+    in-out property <int> long-every;
+    in-out property <int> long-length;
+    in-out property <bool> long-notify;
+    in-out property <bool> long-strict;
+    // Sounds
+    in property <[string]> sounds;
+    in-out property <int> mini-start;
+    in-out property <int> mini-end;
+    in-out property <int> long-start;
+    in-out property <int> long-end;
+    in-out property <int> volume;
+    in property <string> audio-folder;
+    // About
+    in property <string> version;
+    property <bool> confirm-restore;
+
+    callback changed();
+    callback play(int);
+    callback open-audio-folder();
+    callback open-logs();
+    callback open-website();
+    callback restore-defaults();
+
+    title: "Ebb settings";
+    icon: @image-url("icons/ebb.svg");
+    preferred-width: 900px;
+    preferred-height: 820px;
+    min-width: 820px;
+    min-height: 760px;
+    background: Palette.ground;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+
+    HorizontalLayout {
+        Rectangle {
+            width: 220px;
+            background: Palette.nav;
+            VerticalLayout {
+                padding-top: 24px;
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 4px;
+                alignment: start;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-bottom: 18px;
+                    spacing: 10px;
+                    Image {
+                        width: 24px;
+                        height: 24px;
+                        source: @image-url("icons/ebb-tray.svg");
+                    }
+                    Text {
+                        text: "Ebb";
+                        font-size: 15px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        color: Palette.text;
+                    }
+                }
+                NavItem {
+                    text: "General";
+                    icon: "M 12 9 A 3 3 0 1 1 12 15 A 3 3 0 1 1 12 9 M 12 2 L 12 5 M 12 19 L 12 22 M 2 12 L 5 12 M 19 12 L 22 12 M 4.9 4.9 L 7 7 M 17 17 L 19.1 19.1 M 4.9 19.1 L 7 17 M 17 7 L 19.1 4.9";
+                    current: root.page == 0;
+                    clicked => { root.page = 0; }
+                }
+                NavItem {
+                    text: "Schedule";
+                    icon: "M 12 3 A 9 9 0 1 1 12 21 A 9 9 0 1 1 12 3 M 12 7 L 12 12 L 15 14";
+                    current: root.page == 1;
+                    clicked => { root.page = 1; }
+                }
+                NavItem {
+                    text: "Sounds";
+                    icon: "M 11 5 L 6 9 L 2 9 L 2 15 L 6 15 L 11 19 Z M 15.5 8.5 A 5 5 0 0 1 15.5 15.5";
+                    current: root.page == 2;
+                    clicked => { root.page = 2; }
+                }
+                NavItem {
+                    text: "About";
+                    icon: "M 12 3 A 9 9 0 1 1 12 21 A 9 9 0 1 1 12 3 M 12 11 L 12 17 M 12 7.5 L 12 7.6";
+                    current: root.page == 3;
+                    clicked => { root.page = 3; root.confirm-restore = false; }
+                }
+            }
+        }
+
+        if root.page == 0: VerticalLayout {
+            padding: 28px;
+            padding-left: 36px;
+            padding-right: 36px;
+            spacing: 6px;
+            alignment: start;
+            PageTitle { text: "General"; }
+            Rectangle { height: 10px; }
+            SectionLabel { text: "BREAKS"; }
+            Card {
+                Row {
+                    title: "Show breaks as";
+                    Centre {
+                        Segmented {
+                            first: "Window";
+                            second: "Full screen";
+                            second-chosen <=> root.fullscreen;
+                            changed => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Show break ideas";
+                    hint: "Each idea names the study behind it";
+                    Centre {
+                        Switch {
+                            label: "Show break ideas";
+                            checked <=> root.ideas;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Natural breaks";
+                    hint: "Time away from the PC counts as a break";
+                    last: true;
+                    Centre {
+                        Switch {
+                            label: "Natural breaks";
+                            checked <=> root.natural-breaks;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 8px; }
+            SectionLabel { text: "WINDOWS"; }
+            Card {
+                Row {
+                    title: "Start at login";
+                    Centre {
+                        Switch {
+                            label: "Start at login";
+                            checked <=> root.open-at-login;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Hold breaks during Do Not Disturb";
+                    Centre {
+                        Switch {
+                            label: "Hold breaks during Do Not Disturb";
+                            checked <=> root.monitor-dnd;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Language";
+                    last: true;
+                    Centre {
+                        Dropdown {
+                            label: "Language";
+                            model: root.languages;
+                            current <=> root.language;
+                            changed => { root.changed(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.page == 1: VerticalLayout {
+            padding: 28px;
+            padding-left: 36px;
+            padding-right: 36px;
+            spacing: 6px;
+            alignment: start;
+            PageTitle { text: "Schedule"; }
+            Rectangle { height: 10px; }
+            SectionLabel { text: "MINI BREAKS"; }
+            Card {
+                Row {
+                    title: "Take mini breaks";
+                    hint: "Short pauses for your eyes";
+                    Centre {
+                        Switch {
+                            label: "Take mini breaks";
+                            checked <=> root.mini-on;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Every";
+                    Stepper {
+                        label: "minutes between mini breaks";
+                        unit: "min";
+                        minimum: 1;
+                        maximum: 120;
+                        value <=> root.mini-every;
+                        changed => { root.changed(); }
+                    }
+                }
+                Row {
+                    title: "For";
+                    Stepper {
+                        label: "mini break length";
+                        unit: "s";
+                        minimum: 5;
+                        maximum: 300;
+                        step: 5;
+                        value <=> root.mini-length;
+                        changed => { root.changed(); }
+                    }
+                }
+                Row {
+                    title: "Notify before";
+                    hint: "A notification shortly before";
+                    Centre {
+                        Switch {
+                            label: "Notify before mini breaks";
+                            checked <=> root.mini-notify;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Strict mode";
+                    hint: "No skipping or postponing";
+                    last: true;
+                    Centre {
+                        Switch {
+                            label: "Strict mode for mini breaks";
+                            checked <=> root.mini-strict;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 8px; }
+            SectionLabel { text: "LONG BREAKS"; }
+            Card {
+                Row {
+                    title: "Take long breaks";
+                    hint: "Time to stand up and walk";
+                    Centre {
+                        Switch {
+                            label: "Take long breaks";
+                            checked <=> root.long-on;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Every";
+                    Stepper {
+                        label: "minutes between long breaks";
+                        unit: "min";
+                        minimum: 5;
+                        maximum: 240;
+                        step: 5;
+                        value <=> root.long-every;
+                        changed => { root.changed(); }
+                    }
+                }
+                Row {
+                    title: "For";
+                    Stepper {
+                        label: "long break length";
+                        unit: "min";
+                        minimum: 1;
+                        maximum: 60;
+                        value <=> root.long-length;
+                        changed => { root.changed(); }
+                    }
+                }
+                Row {
+                    title: "Notify before";
+                    hint: "A notification shortly before";
+                    Centre {
+                        Switch {
+                            label: "Notify before long breaks";
+                            checked <=> root.long-notify;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Strict mode";
+                    hint: "No skipping or postponing";
+                    last: true;
+                    Centre {
+                        Switch {
+                            label: "Strict mode for long breaks";
+                            checked <=> root.long-strict;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.page == 2: VerticalLayout {
+            padding: 28px;
+            padding-left: 36px;
+            padding-right: 36px;
+            spacing: 6px;
+            alignment: start;
+            PageTitle { text: "Sounds"; }
+            Rectangle { height: 10px; }
+            for kind[k] in ["MINI BREAKS", "LONG BREAKS"]: VerticalLayout {
+                spacing: 6px;
+                padding-bottom: 8px;
+                SectionLabel { text: kind; }
+                Card {
+                    for when[w] in ["At the start", "At the end"]: srow := Row {
+                        property <int> slot: k * 2 + w;
+                        title: when;
+                        last: w == 1;
+                        Centre {
+                            RoundButton {
+                                label: "Play " + when;
+                                icon: "M 8 5 L 8 19 L 19 12 Z";
+                                clicked => { root.play(srow.slot); }
+                            }
+                        }
+                        Centre {
+                            Dropdown {
+                                label: kind + " " + when;
+                                model: root.sounds;
+                                current: srow.slot == 0 ? root.mini-start
+                                    : srow.slot == 1 ? root.mini-end
+                                    : srow.slot == 2 ? root.long-start : root.long-end;
+                                changed => {
+                                    if (srow.slot == 0) { root.mini-start = self.current; }
+                                    if (srow.slot == 1) { root.mini-end = self.current; }
+                                    if (srow.slot == 2) { root.long-start = self.current; }
+                                    if (srow.slot == 3) { root.long-end = self.current; }
+                                    root.changed();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            SectionLabel { text: "ALL SOUNDS"; }
+            Card {
+                Row {
+                    title: "Volume";
+                    Centre {
+                        Slider {
+                            label: "Volume";
+                            value <=> root.volume;
+                            changed => { root.changed(); }
+                        }
+                    }
+                    Text {
+                        width: 44px;
+                        text: root.volume + " %";
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        color: Palette.text-secondary;
+                    }
+                }
+                Row {
+                    title: "Your sound files";
+                    hint: "WAV files in " + root.audio-folder;
+                    last: true;
+                    Centre {
+                        PillButton {
+                            text: "Open folder";
+                            compact: true;
+                            clicked => { root.open-audio-folder(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.page == 3: VerticalLayout {
+            padding: 28px;
+            padding-left: 36px;
+            padding-right: 36px;
+            spacing: 14px;
+            alignment: start;
+            PageTitle { text: "About"; }
+            HorizontalLayout {
+                spacing: 18px;
+                alignment: start;
+                Image {
+                    width: 64px;
+                    height: 64px;
+                    source: @image-url("icons/ebb.svg");
+                }
+                Centre {
+                    Text {
+                        text: "Ebb";
+                        font-size: 22px;
+                        font-weight: 600;
+                        color: Palette.text;
+                    }
+                    Text {
+                        text: "Version " + root.version;
+                        color: Palette.text-secondary;
+                    }
+                }
+            }
+            Text {
+                text: "Break reminders for Windows, built on Stretchly's break planner. Every break idea names the study behind it.";
+                wrap: word-wrap;
+                color: Palette.text-secondary;
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                PillButton {
+                    text: "Open logs folder";
+                    compact: true;
+                    clicked => { root.open-logs(); }
+                }
+                PillButton {
+                    text: "Stretchly website";
+                    compact: true;
+                    clicked => { root.open-website(); }
+                }
+            }
+            Rectangle { height: 12px; }
+            SectionLabel { text: "RESET"; }
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                PillButton {
+                    text: root.confirm-restore ? "Restore every setting" : "Restore defaults";
+                    primary: root.confirm-restore;
+                    compact: true;
+                    clicked => {
+                        if (root.confirm-restore) {
+                            root.confirm-restore = false;
+                            root.restore-defaults();
+                        } else {
+                            root.confirm-restore = true;
+                        }
+                    }
+                }
+                if root.confirm-restore: Text {
+                    text: "All your settings will be lost.";
+                    vertical-alignment: center;
+                    color: Palette.text-secondary;
+                }
+            }
+        }
+    }
+}

@@ -8,6 +8,7 @@ tauri-winrt-notification = "=0.8.1"
 tracing = "=0.1.44"
 windows = { version = "=0.62.2", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Security",

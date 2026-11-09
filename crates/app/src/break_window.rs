@@ -9,8 +9,7 @@ use settings::Settings;
 use slint::{ComponentHandle, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 
 use crate::logic::{BreakButton, BreakScreen, countdown, ring_commands};
-
-slint::include_modules!();
+use crate::ui::{BreakWindow, Palette};
 
 pub struct BreakView {
     window: BreakWindow,
@@ -26,9 +25,13 @@ impl BreakView {
         on_tick: impl FnMut() + 'static,
     ) -> Result<Self, slint::PlatformError> {
         let window = BreakWindow::new()?;
+        window
+            .global::<Palette>()
+            .set_theme(crate::ui::theme(settings));
         window.set_kind(screen.kind.into());
         window.set_headline(screen.headline.into());
         window.set_detail(screen.detail.into());
+        window.set_source(screen.source.into());
         window.set_postpone_label(screen.postpone.into());
         window.set_skip_label(screen.skip.into());
         window.set_finish_label(screen.finish.into());

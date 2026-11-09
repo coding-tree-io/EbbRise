@@ -1,0 +1,507 @@
+// Shared palette and widgets for the break and settings windows (designs B1 and S2).
+// Colours: OKLCH ramps written as hex. Neutrals take the logo's sand hue (85), the accent is
+// green (155). The mode follows the Windows app theme. Every text and control pair was
+// measured in both modes; the lowest are text-source on glow (light 4.87:1) and the button
+// border on card (dark 3.46:1).
+
+import { Palette as System } from "std-widgets.slint";
+
+export global Palette {
+    // `themeSource`: 0 follows the Windows app theme, 1 is light, 2 is dark.
+    in property <int> theme: 0;
+    out property <bool> dark: theme == 0 ? System.color-scheme != ColorScheme.light : theme == 2;
+    out property <color> ground: dark ? #16130E : #FAF6EE;
+    out property <color> glow: dark ? #302817 : #F1E7D2;
+    out property <color> nav: dark ? #0E0C08 : #F1ECE3;
+    out property <color> card: dark ? #1F1D17 : #FEFDF9;
+    out property <color> divider: dark ? #272520 : #E4E1DA;
+    out property <color> ring-track: dark ? #383530 : #DBD7CF;
+    out property <color> ring-light: dark ? #ABF1C3 : #409764;
+    out property <color> ring-deep: dark ? #67A97F : #1A6444;
+    out property <color> text: dark ? #F1EEE9 : #231F17;
+    out property <color> text-secondary: dark ? #C1BDB5 : #59554C;
+    out property <color> text-source: dark ? #9F9B93 : #67635A;
+    out property <color> accent: dark ? #79C594 : #2A7449;
+    out property <color> accent-hover: dark ? #89DDA7 : #1A613A;
+    out property <color> on-accent: dark ? #16130E : #FFFFFF;
+    out property <color> button: dark ? #1F1D17 : #FEFDF9;
+    out property <color> button-hover: dark ? #28251F : #F0ECE4;
+    out property <color> button-border: dark ? #74716B : #89867F;
+    out property <color> focus: dark ? #89DDA7 : #2A7449;
+}
+
+// Icon strokes in a 24 × 24 view box.
+export component Icon inherits Path {
+    width: 16px;
+    height: 16px;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    stroke-width: 1.8px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+}
+
+// A 2 px ring outside its parent while `shown`.
+component FocusRing inherits Rectangle {
+    in property <bool> shown;
+    in property <length> radius;
+    // The user sets width and height to the parent's size plus 8 px.
+    x: -4px;
+    y: -4px;
+    border-radius: self.radius + 4px;
+    border-width: self.shown ? 2px : 0;
+    border-color: Palette.focus;
+}
+
+// Takes focus only from the keyboard: a FocusScope that takes focus on click swallows the
+// first press, so the button under it would not react. `shown` is true for Tab focus only,
+// so mouse users see no focus ring (Windows behaviour).
+export component KeyFocus inherits FocusScope {
+    out property <bool> shown;
+    focus-on-click: false;
+    focus-changed-event(reason) => {
+        self.shown = self.has-focus && reason == FocusReason.tab-navigation;
+    }
+}
+
+// Space and Enter press it.
+component Pressable inherits KeyFocus {
+    callback pressed();
+    key-pressed(event) => {
+        if (event.text == " " || event.text == Key.Return) {
+            root.pressed();
+            return accept;
+        }
+        reject
+    }
+}
+
+export component PillButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <string> icon;
+    // The settings window's smaller size.
+    in property <bool> compact;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    height: root.compact ? 36px : 44px;
+    border-radius: self.height / 2;
+    background: root.primary
+        ? (touch.has-hover ? Palette.accent-hover : Palette.accent)
+        : (touch.has-hover ? Palette.button-hover : Palette.button);
+    border-width: root.primary ? 0 : 1px;
+    border-color: Palette.button-border;
+    animate background { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: root.compact ? 16px : 22px;
+        padding-right: self.padding-left;
+        spacing: 8px;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Icon {
+                commands: root.icon;
+                stroke: root.primary ? Palette.on-accent : Palette.text;
+            }
+        }
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            font-size: root.compact ? 14px : 15px;
+            font-weight: root.primary ? 600 : 400;
+            color: root.primary ? Palette.on-accent : Palette.text;
+        }
+    }
+    FocusRing {
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        shown: focus.shown;
+        radius: root.height / 2;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := Pressable {
+        pressed => { root.clicked(); }
+    }
+}
+
+// On: mint track and dark thumb. Off: outline only, so the states differ in lightness too.
+export component Switch inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> checked;
+    callback toggled();
+
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.checked;
+    accessible-action-default => { root.flip(); }
+    function flip() {
+        root.checked = !root.checked;
+        root.toggled();
+    }
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background: root.checked ? Palette.accent : transparent;
+    border-width: root.checked ? 0 : 1px;
+    border-color: Palette.text-source;
+    animate background { duration: 120ms; }
+    Rectangle {
+        width: root.checked ? 16px : 14px;
+        height: self.width;
+        x: root.checked ? parent.width - self.width - 4px : 4px;
+        y: (parent.height - self.height) / 2;
+        border-radius: self.width / 2;
+        background: root.checked ? Palette.on-accent : Palette.text-secondary;
+        animate x { duration: 120ms; }
+    }
+    FocusRing {
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        shown: focus.shown;
+        radius: 12px;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.flip(); }
+    }
+    focus := Pressable {
+        pressed => { root.flip(); }
+    }
+}
+
+export component RoundButton inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Palette.button-border;
+    background: touch.has-hover && root.enabled ? Palette.button-hover : transparent;
+    opacity: root.enabled ? 1 : 0.4;
+    Icon {
+        width: 14px;
+        height: 14px;
+        commands: root.icon;
+        stroke: Palette.text;
+        stroke-width: 2px;
+    }
+    FocusRing {
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        shown: focus.shown;
+        radius: 16px;
+    }
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { if (root.enabled) { root.clicked(); } }
+    }
+    focus := Pressable {
+        pressed => { if (root.enabled) { root.clicked(); } }
+    }
+}
+
+// − value +, clamped to `minimum`..`maximum`.
+export component Stepper inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> unit;
+    in property <int> minimum: 1;
+    in property <int> maximum: 120;
+    in property <int> step: 1;
+    in-out property <int> value;
+    callback changed();
+
+    horizontal-stretch: 0;
+    // The buttons' height, so the value text centres on them.
+    height: 32px;
+    spacing: 4px;
+    RoundButton {
+        label: "Less " + root.label;
+        icon: "M 6 12 L 18 12";
+        enabled: root.value > root.minimum;
+        clicked => {
+            root.value = max(root.minimum, root.value - root.step);
+            root.changed();
+        }
+    }
+    Text {
+        min-width: 72px;
+        text: root.value + " " + root.unit;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        color: Palette.text;
+        accessible-role: text;
+    }
+    RoundButton {
+        label: "More " + root.label;
+        icon: "M 6 12 L 18 12 M 12 6 L 12 18";
+        enabled: root.value < root.maximum;
+        clicked => {
+            root.value = min(root.maximum, root.value + root.step);
+            root.changed();
+        }
+    }
+}
+
+// Two options in one pill; the chosen one is filled.
+export component Segmented inherits Rectangle {
+    in property <string> first;
+    in property <string> second;
+    // false: first, true: second.
+    in-out property <bool> second-chosen;
+    callback changed();
+
+    height: 38px;
+    border-radius: 19px;
+    border-width: 1px;
+    border-color: Palette.button-border;
+    background: Palette.ground;
+    HorizontalLayout {
+        padding: 3px;
+        for option[index] in [root.first, root.second]: cell := Rectangle {
+            property <bool> chosen: (index == 1) == root.second-chosen;
+            accessible-role: button;
+            accessible-label: option;
+            accessible-checked: self.chosen;
+            accessible-action-default => { root.choose(index == 1); }
+            border-radius: self.height / 2;
+            background: self.chosen ? Palette.accent : transparent;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                Text {
+                    text: option;
+                    vertical-alignment: center;
+                    font-weight: cell.chosen ? 600 : 400;
+                    color: cell.chosen ? Palette.on-accent : Palette.text;
+                }
+            }
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.choose(index == 1); }
+            }
+        }
+    }
+    function choose(second: bool) {
+        if (second != root.second-chosen) {
+            root.second-chosen = second;
+            root.changed();
+        }
+    }
+    FocusRing {
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        shown: focus.shown;
+        radius: 19px;
+    }
+    focus := KeyFocus {
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow || event.text == Key.RightArrow || event.text == " ") {
+                root.choose(!root.second-chosen);
+                return accept;
+            }
+            reject
+        }
+    }
+}
+
+// A pill that opens a list; long lists scroll.
+export component Dropdown inherits Rectangle {
+    in property <string> label;
+    in property <[string]> model;
+    in-out property <int> current;
+    callback changed();
+
+    function choose(index: int) {
+        if (index >= 0 && index < root.model.length && index != root.current) {
+            root.current = index;
+            root.changed();
+        }
+    }
+    accessible-role: combobox;
+    accessible-label: root.label;
+    accessible-value: root.model[root.current];
+    min-width: 170px;
+    preferred-width: 200px;
+    horizontal-stretch: 0;
+    height: 34px;
+    border-radius: 17px;
+    border-width: 1px;
+    border-color: Palette.button-border;
+    background: touch.has-hover ? Palette.button-hover : Palette.ground;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 12px;
+        spacing: 10px;
+        Text {
+            text: root.model[root.current];
+            vertical-alignment: center;
+            color: Palette.text;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                width: 14px;
+                height: 14px;
+                commands: "M 6 9 L 12 15 L 18 9";
+                stroke: Palette.text-secondary;
+                stroke-width: 2px;
+            }
+        }
+    }
+    FocusRing {
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        shown: focus.shown;
+        radius: 17px;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { popup.show(); }
+    }
+    focus := KeyFocus {
+        key-pressed(event) => {
+            if (event.text == Key.DownArrow) {
+                root.choose(root.current + 1);
+                return accept;
+            }
+            if (event.text == Key.UpArrow) {
+                root.choose(root.current - 1);
+                return accept;
+            }
+            if (event.text == " " || event.text == Key.Return) {
+                popup.show();
+                return accept;
+            }
+            reject
+        }
+    }
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 4px;
+        width: max(root.width, 200px);
+        height: min(root.model.length * 34px + 8px, 300px);
+        Rectangle {
+            background: Palette.card;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Palette.button-border;
+            clip: true;
+            Flickable {
+                content-height: root.model.length * 34px + 8px;
+                VerticalLayout {
+                    padding: 4px;
+                    for item[index] in root.model: Rectangle {
+                        height: 34px;
+                        border-radius: 8px;
+                        background: index == root.current ? Palette.button-hover
+                            : (row.has-hover ? Palette.divider : transparent);
+                        Text {
+                            x: 12px;
+                            text: item;
+                            vertical-alignment: center;
+                            color: index == root.current ? Palette.accent : Palette.text;
+                        }
+                        row := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.choose(index); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 0–100, with a ringed thumb; arrow keys move it by 5.
+export component Slider inherits Rectangle {
+    in property <string> label;
+    in-out property <int> value;
+    callback changed();
+
+    function set(v: int) {
+        if (max(0, min(100, v)) != root.value) {
+            root.value = max(0, min(100, v));
+            root.changed();
+        }
+    }
+    accessible-role: slider;
+    accessible-label: root.label;
+    accessible-value: root.value + " %";
+    accessible-value-minimum: 0;
+    accessible-value-maximum: 100;
+    accessible-value-step: 5;
+    width: 220px;
+    height: 24px;
+    Rectangle {
+        y: 10px;
+        height: 4px;
+        border-radius: 2px;
+        background: Palette.ring-track;
+    }
+    Rectangle {
+        x: 0;
+        y: 10px;
+        width: parent.width * root.value / 100;
+        height: 4px;
+        border-radius: 2px;
+        background: Palette.accent;
+    }
+    Rectangle {
+        x: (parent.width - self.width) * root.value / 100;
+        y: 2px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: Palette.text;
+        border-width: 4px;
+        border-color: Palette.accent;
+        FocusRing {
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            shown: focus.shown;
+            radius: 10px;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.set(round(self.mouse-x / self.width * 100));
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.set(round(self.mouse-x / self.width * 100));
+            }
+        }
+    }
+    focus := KeyFocus {
+        key-pressed(event) => {
+            if (event.text == Key.RightArrow || event.text == Key.UpArrow) {
+                root.set(root.value + 5);
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.DownArrow) {
+                root.set(root.value - 5);
+                return accept;
+            }
+            reject
+        }
+    }
+}

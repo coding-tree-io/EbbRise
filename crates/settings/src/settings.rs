@@ -51,8 +51,11 @@ pub struct Settings {
     pub mini_break_interval: i64,
     /// Long break length, ms.
     pub long_break_duration: i64,
-    /// Mini breaks before each Long break; every (this + 1)-th break is Long.
+    /// Stretchly's Mini breaks before each Long break. Kept for config compatibility; only
+    /// the first import reads it, to fill [`Settings::long_break_every`].
     pub long_break_interval: i64,
+    /// Time between Long breaks, ms, on a clock of their own (not in Stretchly).
+    pub long_break_every: i64,
     /// Warn before a Long break.
     pub long_break_notification: bool,
     /// Warn before a Mini break.
@@ -226,7 +229,7 @@ const DEFAULTS: &str = include_str!("default-settings.json");
 impl Default for Settings {
     /// Stretchly 1.22.1 defaults on Windows (`defaultSettings.js`).
     fn default() -> Self {
-        serde_json::from_str(DEFAULTS).expect("valid bundled defaults")
+        Self::from_json("{}").expect("valid bundled defaults")
     }
 }
 
@@ -234,6 +237,8 @@ impl Settings {
     /// Reads a Stretchly-style config; top-level keys it lacks keep their defaults.
     ///
     /// This is a shallow merge, like electron-store's `Object.assign(defaults, store)`.
+    /// A config without `longBreakEvery` (Stretchly's) gets it from its Mini break interval
+    /// and Long break count, so Long breaks come as often as before.
     ///
     /// # Errors
     /// When `text` is not a JSON object or a value has the wrong type.
@@ -244,6 +249,14 @@ impl Settings {
         type Object = serde_json::Map<String, serde_json::Value>;
         let mut settings: Object = serde_json::from_str(DEFAULTS).expect("valid bundled defaults");
         settings.extend(serde_json::from_str::<Object>(text)?);
+        if !settings.contains_key("longBreakEvery") {
+            let number = |key: &str| settings.get(key).and_then(serde_json::Value::as_i64);
+            if let (Some(interval), Some(count)) =
+                (number("miniBreakInterval"), number("longBreakInterval"))
+            {
+                settings.insert("longBreakEvery".into(), (interval * (count + 1)).into());
+            }
+        }
         serde_json::from_value(settings.into())
     }
 

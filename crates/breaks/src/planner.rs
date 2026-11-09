@@ -2,6 +2,7 @@ use crate::{Settings, can_postpone};
 
 mod break_time;
 mod holds;
+mod settings_change;
 
 pub use break_time::BreakTime;
 
@@ -47,7 +48,8 @@ pub enum Event {
 /// ```
 pub struct BreaksPlanner {
     settings: Settings,
-    break_number: i64,
+    /// When the next Long break is due; its own clock, apart from Mini breaks.
+    long_due: Option<i64>,
     postpones: u32,
     deadline: Option<i64>,
     delay: i64,
@@ -68,7 +70,7 @@ impl BreaksPlanner {
     pub fn new(settings: Settings, now: i64) -> Self {
         let mut planner = Self {
             settings,
-            break_number: 0,
+            long_due: None,
             postpones: 0,
             deadline: None,
             delay: 0,
@@ -119,9 +121,13 @@ impl BreaksPlanner {
         &self.next
     }
 
-    /// Breaks planned so far; with Long breaks on, every `longBreakInterval + 1`-th is Long.
-    pub fn break_number(&self) -> i64 {
-        self.break_number
+    /// Time until the next Long break is due on its own clock; `None` when Long breaks are
+    /// off or no cycle runs.
+    pub fn time_to_long_break(&self, now: i64) -> Option<i64> {
+        self.settings
+            .long_break
+            .then_some(self.long_due?)
+            .map(|due| (due - now).max(0))
     }
 
     /// A break is running: it has started and not yet finished.
@@ -141,7 +147,8 @@ impl BreaksPlanner {
             )),
             _ => None,
         };
-        if let Some((event, interval)) = notification {
+        if let Some((event, interval)) = notification.filter(|(_, interval)| self.delay > *interval)
+        {
             self.deadline = self.deadline.map(|deadline| deadline - interval);
             self.delay -= interval;
             self.next = event;
@@ -171,24 +178,15 @@ impl BreaksPlanner {
         true
     }
 
-    /// Starts a Mini break after `delay` ms, or shortly when `None`; the Mini/Long order then
-    /// continues from it.
+    /// Starts a Mini break after `delay` ms, or shortly when `None`. The Long break clock
+    /// keeps running.
     pub fn skip_to_mini(&mut self, now: i64, delay: Option<i64>) {
-        if self.settings.mini_break
-            && self.settings.long_break
-            && self.break_number % (self.settings.long_break_interval + 1) == 0
-        {
-            self.break_number = 1;
-        }
         self.skip_to(Event::StartMiniBreak, now, delay);
     }
 
-    /// Starts a Long break after `delay` ms, or shortly when `None`; the Mini/Long order then
-    /// continues from it.
+    /// Starts a Long break after `delay` ms, or shortly when `None`. The Long break clock
+    /// restarts when it ends.
     pub fn skip_to_long(&mut self, now: i64, delay: Option<i64>) {
-        if self.settings.mini_break && self.settings.long_break {
-            self.break_number = self.settings.long_break_interval + 1;
-        }
         self.skip_to(Event::StartLongBreak, now, delay);
     }
 
@@ -202,7 +200,7 @@ impl BreaksPlanner {
     /// Pauses breaks for `duration` ms, or until [`Self::resume`] with [`Self::INDEFINITELY`].
     pub fn pause(&mut self, now: i64, duration: i64) {
         self.paused = true;
-        self.break_number = 0;
+        self.long_due = None;
         self.postpones = 0;
         self.next = Event::ResumeBreaks;
         self.deadline = if duration == Self::INDEFINITELY {
@@ -223,7 +221,7 @@ impl BreaksPlanner {
         self.suspended = false;
         self.away = false;
         self.exclusion = false;
-        self.break_number = 0;
+        self.long_due = None;
         self.plan_next(now);
     }
 
@@ -272,29 +270,35 @@ impl BreaksPlanner {
         Some(event)
     }
 
-    // Upstream `nextBreak`.
+    // Upstream `nextBreak`, with Long breaks on their own clock (`longBreakEvery`). A Long
+    // break due before the middle of the Mini break wait after the next one takes the next
+    // Mini break's place and time, so two breaks never come close together. Both clocks restart after
+    // a Long break.
     fn plan_next(&mut self, now: i64) {
         self.postpones = 0;
-        self.break_number += 1;
-        if !self.settings.mini_break && !self.settings.long_break {
-            self.deadline = None;
-            return;
+        if self.next == Event::FinishLongBreak {
+            self.long_due = None;
         }
-        let long = self.settings.long_break
-            && (!self.settings.mini_break
-                || self.break_number % (self.settings.long_break_interval + 1) == 0);
-        let interval = if self.settings.mini_break {
-            self.settings.mini_break_interval
-        } else {
-            self.settings.mini_break_interval * (self.settings.long_break_interval + 1)
+        let s = &self.settings;
+        let mini = s.mini_break.then(|| now + s.mini_break_interval);
+        let long = s
+            .long_break
+            .then(|| *self.long_due.get_or_insert(now + s.long_break_every));
+        let (at, start) = match (mini, long) {
+            (None, None) => {
+                self.deadline = None;
+                return;
+            }
+            (Some(mini), Some(long)) if long <= mini + s.mini_break_interval / 2 => {
+                (mini, Event::StartLongBreak)
+            }
+            (Some(mini), _) => (mini, Event::StartMiniBreak),
+            (None, Some(long)) => (long, Event::StartLongBreak),
         };
-        self.deadline = Some(now + interval);
-        self.delay = interval;
-        self.next = if long {
-            Event::StartLongBreak
-        } else {
-            Event::StartMiniBreak
-        };
+        let at = at.max(now);
+        self.deadline = Some(at);
+        self.delay = at - now;
+        self.next = start;
         self.add_notification();
         if self.dnd || self.exclusion || self.away {
             self.deadline = None;

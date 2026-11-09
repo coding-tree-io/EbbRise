@@ -5,7 +5,9 @@
 mod break_window;
 mod logging;
 mod logic;
+mod settings_window;
 mod tray_menu;
+mod ui;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -17,11 +19,11 @@ use platform::{Signal, SignalWindow, awake_ms, idle_ms, sound, toast};
 use settings::Settings;
 use tracing::{error, info, warn};
 use tray_icon::menu::MenuEvent;
-use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::break_window::BreakView;
 use crate::logic::{BreakButton, Core, Effect, Environment, MenuAction, MenuEntry};
-use crate::tray_menu::build_menu;
+use crate::tray_menu::{build_menu, tray_icon};
 
 const APP_ID: &str = "StretchCore";
 
@@ -55,6 +57,9 @@ struct App {
     audio_folder: Option<PathBuf>,
     /// The break window while a break runs.
     break_view: Option<BreakView>,
+    settings_window: Option<ui::SettingsWindow>,
+    /// The sound names behind the settings window's sound lists.
+    settings_sounds: Vec<String>,
 }
 
 type AppAction = Box<dyn FnOnce(&mut App)>;
@@ -101,7 +106,7 @@ fn main() {
     {
         warn!(%error, "audio folder not created");
     }
-    if let Err(error) = toast::register(APP_ID, "Stretch") {
+    if let Err(error) = toast::register(APP_ID, "Ebb") {
         error!(%error, "toast registration failed");
     }
     let signals =
@@ -132,6 +137,8 @@ fn main() {
             menu: Vec::new(),
             audio_folder,
             break_view: None,
+            settings_window: None,
+            settings_sounds: Vec::new(),
         });
     });
     with_app(App::rearm_timer_and_refresh_tray);
@@ -173,6 +180,7 @@ impl App {
                 Effect::Sound(name) => self.play(&name),
                 Effect::ShowBreak(screen) => self.open_break(screen),
                 Effect::CloseBreak => self.close_break(),
+                Effect::OpenSettings => self.open_settings(),
             }
         }
     }
@@ -202,6 +210,9 @@ impl App {
 
     fn on_menu(&mut self, action: MenuAction) {
         info!(?action, "menu");
+        if action == MenuAction::Preferences {
+            return self.open_settings();
+        }
         if action == MenuAction::Quit {
             if self.core.may_quit() {
                 return drop(slint::quit_event_loop());
@@ -261,7 +272,7 @@ fn run_second_instance(args: &[String]) {
     };
     match command.name.as_str() {
         "help" => println!("{}", commands::HELP),
-        "version" => println!("Stretch version {}", env!("CARGO_PKG_VERSION")),
+        "version" => println!("Ebb version {}", env!("CARGO_PKG_VERSION")),
         "logs" => match app_folder() {
             Some(folder) => println!("{}", log_path(&folder).display()),
             None => eprintln!("APPDATA is not set, so there is no log file"),
@@ -296,16 +307,6 @@ fn sync_autostart(open_at_login: bool) {
     if let Err(error) = platform::set_autostart(APP_ID, command.as_deref()) {
         warn!(%error, "autostart not changed");
     }
-}
-
-/// shortcut: a plain coloured square until the redesigned icons exist (Stretchly's icon licence is unclear, R4).
-fn tray_icon(paused: bool) -> Icon {
-    let colour = if paused {
-        [150u8, 150, 150, 255]
-    } else {
-        [40u8, 160, 120, 255]
-    };
-    Icon::from_rgba(colour.repeat(16 * 16), 16, 16).expect("tray icon image")
 }
 
 /// `%APPDATA%\stretch-core`, where the config and the logs live.

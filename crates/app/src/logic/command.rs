@@ -3,7 +3,7 @@
 use breaks::BreaksPlanner;
 use commands::Command;
 
-use super::{BreakIdea, Core, Environment};
+use super::{BreakButton, BreakIdea, Core, Effect, Environment};
 
 /// Words a `mini` or `long` command gives the next break; `None` keeps the picked idea's part.
 #[derive(Clone, Debug, Default)]
@@ -23,14 +23,30 @@ impl From<BreakIdea> for IdeaOverride {
 
 impl Core {
     /// Runs a forwarded command line. `help`, `version` and `logs` run in the second
-    /// process. `postpone`, `skip` and `finish` need a break window, and upstream also drops
-    /// them when none is open. `preferences` waits for the settings window, which upstream
-    /// opens.
-    pub(super) fn on_command(&mut self, args: &[String], now: i64, os: &impl Environment) {
+    /// process. `postpone`, `skip` and `finish` press the break window's button, and do
+    /// nothing when it does not offer it.
+    pub(super) fn on_command(
+        &mut self,
+        args: &[String],
+        now: i64,
+        os: &impl Environment,
+    ) -> Vec<Effect> {
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let Some(command) = Command::parse(&args) else {
-            return;
+            return Vec::new();
         };
+        let button = match command.name.as_str() {
+            "postpone" => Some(BreakButton::Postpone),
+            "skip" => Some(BreakButton::Skip),
+            "finish" => Some(BreakButton::Finish),
+            _ => None,
+        };
+        if let Some(button) = button {
+            return self.on_break_button(button, now);
+        }
+        if command.name == "preferences" {
+            return vec![Effect::OpenSettings];
+        }
         match command.name.as_str() {
             "reset" => self.planner.reset(now),
             "pause" => self.pause_from_command(&command, now, os),
@@ -41,6 +57,7 @@ impl Core {
             "last" => self.start_last_break_again(now),
             _ => {}
         }
+        Vec::new()
     }
 
     fn pause_from_command(&mut self, command: &Command, now: i64, os: &impl Environment) {

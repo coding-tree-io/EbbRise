@@ -45,14 +45,11 @@ pub(super) fn tray_message(planner: &BreaksPlanner, words: &Translator, now: i64
         words.text("statusMessages.nextMiniBreak"),
         time_in(words, remaining)
     );
-    let settings = planner.settings();
-    if settings.long_break {
-        let cycle = settings.long_break_interval + 1;
-        let left = (cycle - planner.break_number() % cycle).max(0) as u64;
+    if let Some(long) = planner.time_to_long_break(now) {
         message += &format!(
             "\n{} {}",
             words.text("statusMessages.nextLongBreak"),
-            words.count("statusMessages.afterMiniBreak", left)
+            time_in(words, long)
         );
     }
     message

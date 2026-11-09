@@ -16,6 +16,7 @@ ideas = { path = "../ideas" }
 fastrand = "=2.5.0"
 platform = { path = "../platform" }
 jiff = "=0.2.41"
+resvg = { version = "=0.48.1", default-features = false }
 tray-icon = { version = "=0.26.1", default-features = false }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "std"] }
