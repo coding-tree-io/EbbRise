@@ -174,26 +174,6 @@ pub fn send_command(window: HWND, args: &[String]) -> bool {
     sent.0 != 0 && result != 0
 }
 
-/// Runs the Win32 message loop on this thread until [`quit`].
-///
-/// shortcut: own loop until the Slint UI exists; then Slint's loop pumps the same window.
-pub fn run_message_loop() {
-    let mut message = MSG::default();
-    // SAFETY: `message` is a valid MSG that outlives each call.
-    unsafe {
-        while GetMessageW(&mut message, None, 0, 0).as_bool() {
-            let _ = TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-    }
-}
-
-/// Ends [`run_message_loop`] on this thread.
-pub fn quit() {
-    // SAFETY: no pointers; posts WM_QUIT to this thread.
-    unsafe { PostQuitMessage(0) };
-}
-
 /// Hands `signal` to the handler, after any signals that are still waiting.
 fn dispatch(signal: Signal) {
     PENDING.with(|pending| pending.borrow_mut().push_back(signal));

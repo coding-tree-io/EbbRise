@@ -19,6 +19,10 @@ jiff = "=0.2.41"
 tray-icon = { version = "=0.26.1", default-features = false }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "std"] }
+slint = "=1.18.1"
+
+[build-dependencies]
+slint-build = "=1.18.1"
 
 [dev-dependencies]
 cargo_metadata = "=0.19.2"

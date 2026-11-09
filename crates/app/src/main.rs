@@ -2,8 +2,10 @@
 //! and carries out what the planner returns. Everything runs on the main thread.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod break_window;
 mod logging;
 mod logic;
+mod tray_menu;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -11,14 +13,15 @@ use std::path::{Path, PathBuf};
 
 use breaks::until_morning;
 use commands::Command;
-use i18n::Translator;
-use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
+use platform::{Signal, SignalWindow, awake_ms, idle_ms, sound, toast};
 use settings::Settings;
 use tracing::{error, info, warn};
-use tray_icon::menu::{IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use tray_icon::menu::MenuEvent;
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
-use crate::logic::{Core, Environment, MenuAction};
+use crate::break_window::BreakView;
+use crate::logic::{BreakButton, Core, Effect, Environment, MenuAction, MenuEntry};
+use crate::tray_menu::build_menu;
 
 const APP_ID: &str = "StretchCore";
 
@@ -46,6 +49,12 @@ struct App {
     core: Core,
     signals: SignalWindow,
     tray: TrayIcon,
+    /// The menu the tray shows, so it is rebuilt only when it changes.
+    menu: Vec<MenuEntry>,
+    /// `%APPDATA%\stretch-core\audio`, where the user's sounds live.
+    audio_folder: Option<PathBuf>,
+    /// The break window while a break runs.
+    break_view: Option<BreakView>,
 }
 
 type AppAction = Box<dyn FnOnce(&mut App)>;
@@ -79,11 +88,19 @@ fn main() {
         let args: Vec<String> = std::env::args().skip(1).collect();
         return run_second_instance(&args);
     }
-    if let Some(folder) = app_folder() {
-        logging::start(&log_path(&folder));
+    let folder = app_folder();
+    if let Some(folder) = &folder {
+        logging::start(&log_path(folder));
     }
     info!(version = env!("CARGO_PKG_VERSION"), "starting");
     let settings = load_settings();
+    sync_autostart(settings.open_at_login);
+    let audio_folder = folder.map(|folder| folder.join("audio"));
+    if let Some(audio) = &audio_folder
+        && let Err(error) = std::fs::create_dir_all(audio)
+    {
+        warn!(%error, "audio folder not created");
+    }
     if let Err(error) = toast::register(APP_ID, "Stretch") {
         error!(%error, "toast registration failed");
     }
@@ -92,7 +109,6 @@ fn main() {
     let core = Core::new(settings, awake_ms(), signals.focus_assist);
 
     let tray = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu(core.words())))
         .with_tooltip(core.words().text("main.toolTipHeader"))
         .with_icon(tray_icon(false))
         .build()
@@ -113,10 +129,16 @@ fn main() {
             core,
             signals,
             tray,
+            menu: Vec::new(),
+            audio_folder,
+            break_view: None,
         });
     });
     with_app(App::rearm_timer_and_refresh_tray);
-    platform::run_message_loop();
+    // Slint's loop also dispatches the signal window's and the tray's Win32 messages.
+    if let Err(error) = slint::run_event_loop_until_quit() {
+        error!(%error, "event loop failed");
+    }
 }
 
 impl App {
@@ -124,22 +146,67 @@ impl App {
         if signal != Signal::Timer {
             info!(?signal, "signal");
         }
-        for toast in self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows) {
-            info!(title = %toast.title, "toast");
-            toast::show(
-                APP_ID,
-                &toast.title,
-                &toast.text,
-                self.core.settings().silent_notifications,
-            );
-        }
+        let effects = self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows);
+        self.carry_out(effects);
         self.rearm_timer_and_refresh_tray();
+    }
+
+    fn on_break_button(&mut self, button: BreakButton) {
+        info!(?button, "break button");
+        let effects = self.core.on_break_button(button, awake_ms());
+        self.carry_out(effects);
+        self.rearm_timer_and_refresh_tray();
+    }
+
+    fn carry_out(&mut self, effects: Vec<Effect>) {
+        for effect in effects {
+            match effect {
+                Effect::Toast(toast) => {
+                    info!(title = %toast.title, "toast");
+                    toast::show(
+                        APP_ID,
+                        &toast.title,
+                        &toast.text,
+                        self.core.settings().silent_notifications,
+                    );
+                }
+                Effect::Sound(name) => self.play(&name),
+                Effect::ShowBreak(screen) => self.open_break(screen),
+                Effect::CloseBreak => self.close_break(),
+            }
+        }
+    }
+
+    fn close_break(&mut self) {
+        if let Some(view) = self.break_view.take() {
+            view.close();
+        }
+    }
+
+    fn open_break(&mut self, screen: logic::BreakScreen) {
+        self.close_break();
+        let on_button = |button| with_app(move |app| app.on_break_button(button));
+        let on_tick = || with_app(App::refresh_break);
+        match BreakView::open(screen, self.core.settings(), on_button, on_tick) {
+            Ok(view) => self.break_view = Some(view),
+            Err(error) => error!(%error, "break window failed"),
+        }
+        self.refresh_break();
+    }
+
+    fn refresh_break(&mut self) {
+        if let (Some(view), Some(time)) = (&self.break_view, self.core.break_time(awake_ms())) {
+            view.refresh(self.core.words(), &time);
+        }
     }
 
     fn on_menu(&mut self, action: MenuAction) {
         info!(?action, "menu");
         if action == MenuAction::Quit {
-            return platform::quit();
+            if self.core.may_quit() {
+                return drop(slint::quit_event_loop());
+            }
+            return info!("quit refused: a strict-mode break runs");
         }
         self.core.on_menu(action, awake_ms(), &Windows);
         self.rearm_timer_and_refresh_tray();
@@ -153,10 +220,35 @@ impl App {
         self.refresh_tray();
     }
 
-    fn refresh_tray(&self) {
-        let (text, paused) = self.core.tray(awake_ms());
+    fn refresh_tray(&mut self) {
+        let now = awake_ms();
+        let (text, paused) = self.core.tray(now);
         let _ = self.tray.set_tooltip(Some(text));
         let _ = self.tray.set_icon(Some(tray_icon(paused)));
+        let menu = self.core.menu(now);
+        if menu != self.menu {
+            self.tray.set_menu(Some(Box::new(build_menu(&menu))));
+            self.menu = menu;
+        }
+    }
+
+    /// Plays the user's `<name>.wav` from the audio folder at the settings' volume.
+    fn play(&self, name: &str) {
+        // shortcut: Stretchly's own WAVs are not bundled until their licence is known (ADR 0001 R4).
+        let Some(path) = self
+            .audio_folder
+            .as_deref()
+            .and_then(|folder| sound_file(folder, name))
+        else {
+            return info!(name, "no sound file");
+        };
+        match std::fs::read(&path) {
+            Ok(wav) => match sound::with_volume(&wav, self.core.settings().volume) {
+                Some(wav) => sound::play(wav),
+                None => warn!(path = %path.display(), "not a WAV file"),
+            },
+            Err(error) => warn!(path = %path.display(), %error, "sound unreadable"),
+        }
     }
 }
 
@@ -184,42 +276,26 @@ fn run_second_instance(args: &[String]) {
     }
 }
 
-/// Upstream's tray menu, without the items that need a window (Preferences).
-fn tray_menu(words: &Translator) -> Menu {
-    let item =
-        |action: MenuAction, key: &str| MenuItem::with_id(action.id(), words.text(key), true, None);
-    let submenu = |key: &str, items: &[&dyn IsMenuItem]| {
-        Submenu::with_items(words.text(key), true, items).expect("tray submenu")
-    };
-    let pause_hour = MenuItem::with_id(
-        MenuAction::PauseHour.id(),
-        words.count("utils.hours", 1),
-        true,
-        None,
-    );
-    Menu::with_items(&[
-        &submenu(
-            "main.skipToTheNext",
-            &[
-                &item(MenuAction::SkipToMini, "main.toMiniBreak"),
-                &item(MenuAction::SkipToLong, "main.toLongBreak"),
-            ],
-        ),
-        &item(MenuAction::Resume, "main.resume"),
-        &submenu(
-            "main.pause",
-            &[
-                &pause_hour,
-                &item(MenuAction::PauseUntilMorning, "main.untilMorning"),
-                &PredefinedMenuItem::separator(),
-                &item(MenuAction::PauseIndefinitely, "main.indefinitely"),
-            ],
-        ),
-        &item(MenuAction::Reset, "main.resetBreaks"),
-        &PredefinedMenuItem::separator(),
-        &item(MenuAction::Quit, "main.quitStretchly"),
-    ])
-    .expect("tray menu")
+/// `<name>.wav` in `folder`, when the name is a plain file name (upstream `audioResolver`)
+/// and the file exists.
+fn sound_file(folder: &Path, name: &str) -> Option<PathBuf> {
+    let file = format!("{name}.wav");
+    let plain = file
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    let path = folder.join(file);
+    (plain && path.is_file()).then_some(path)
+}
+
+/// Upstream syncs the login item with `openAtLogin` at every start.
+fn sync_autostart(open_at_login: bool) {
+    let command = std::env::current_exe()
+        .ok()
+        .map(|exe| format!("\"{}\"", exe.display()));
+    let command = command.filter(|_| open_at_login);
+    if let Err(error) = platform::set_autostart(APP_ID, command.as_deref()) {
+        warn!(%error, "autostart not changed");
+    }
 }
 
 /// shortcut: a plain coloured square until the redesigned icons exist (Stretchly's icon licence is unclear, R4).
@@ -256,5 +332,25 @@ fn load_settings() -> Settings {
             error!(path = %own.display(), %error, "settings unreadable, using defaults");
             Settings::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sound_files_are_plain_names_inside_the_audio_folder() {
+        let folder = std::env::temp_dir().join(format!("stretch-audio-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("my-chime_2.wav"), b"").unwrap();
+        assert_eq!(
+            sound_file(&folder, "my-chime_2"),
+            Some(folder.join("my-chime_2.wav"))
+        );
+        assert_eq!(sound_file(&folder, "missing"), None);
+        assert_eq!(sound_file(&folder, r"..\my-chime_2"), None);
+        assert_eq!(sound_file(&folder, "sub/my-chime_2"), None);
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 }

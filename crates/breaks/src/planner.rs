@@ -1,6 +1,9 @@
 use crate::{Settings, can_postpone};
 
+mod break_time;
 mod holds;
+
+pub use break_time::BreakTime;
 
 /// Upstream `skipToMiniBreak (delay = 100)`.
 const SKIP_DELAY_MS: i64 = 100;
@@ -149,38 +152,20 @@ impl BreaksPlanner {
     ///
     /// Refused when postponing is off, the limit is used up, or too much of the break passed.
     pub fn postpone(&mut self, now: i64) -> bool {
-        let s = &self.settings;
-        let (delay, limit, notification_interval, event, enabled, percent) = match self.next {
-            Event::FinishMiniBreak => (
-                s.mini_break_postpone_time,
-                s.mini_break_postpones_limit,
-                s.mini_break_notification_interval,
-                Event::StartMiniBreak,
-                s.mini_break_postpone,
-                s.mini_break_postponable_duration_percent,
-            ),
-            Event::FinishLongBreak => (
-                s.long_break_postpone_time,
-                s.long_break_postpones_limit,
-                s.long_break_notification_interval,
-                Event::StartLongBreak,
-                s.long_break_postpone,
-                s.long_break_postponable_duration_percent,
-            ),
-            _ => return false,
-        };
-        let Some(deadline) = self.deadline else {
+        let Some(rule) = self.postpone_rule() else {
             return false;
         };
-        let passed_percent = (now - (deadline - self.delay)) as f64 / self.delay as f64 * 100.0;
-        if self.postpones >= limit || !can_postpone(enabled, passed_percent, percent as f64) {
+        if self.deadline.is_none()
+            || self.postpones >= rule.limit
+            || !can_postpone(rule.enabled, self.passed_percent(now), rule.percent)
+        {
             return false;
         }
         self.postpones += 1;
-        self.deadline = Some(now + delay);
-        self.delay = delay;
-        self.next = event;
-        if delay > notification_interval {
+        self.deadline = Some(now + rule.delay);
+        self.delay = rule.delay;
+        self.next = rule.start;
+        if rule.delay > rule.notification_interval {
             self.add_notification();
         }
         true

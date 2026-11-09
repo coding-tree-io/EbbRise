@@ -36,7 +36,8 @@ pub struct AppExclusion {
 pub struct PauseDuration {
     /// Milliseconds.
     pub duration: i64,
-    /// Global shortcut in Electron accelerator format; empty for none.
+    /// Global shortcut in Electron accelerator format; empty or missing for none.
+    #[serde(default)]
     pub shortcut: String,
 }
 
@@ -244,5 +245,15 @@ impl Settings {
         let mut settings: Object = serde_json::from_str(DEFAULTS).expect("valid bundled defaults");
         settings.extend(serde_json::from_str::<Object>(text)?);
         serde_json::from_value(settings.into())
+    }
+
+    /// The `pauseBreaksDurations` entries upstream accepts: whole minutes up to the largest
+    /// timer delay (2^31 - 1 ms).
+    pub fn pause_durations(&self) -> impl Iterator<Item = &PauseDuration> {
+        self.pause_breaks_durations.iter().filter(|entry| {
+            entry.duration > 0
+                && entry.duration <= i64::from(i32::MAX)
+                && entry.duration % 60_000 == 0
+        })
     }
 }

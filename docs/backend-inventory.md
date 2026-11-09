@@ -40,11 +40,11 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 
 | Effect | Upstream | Windows native |
 | --- | --- | --- |
-| Tray icon, menu, tooltip | Electron `Tray` + `Menu` | `Shell_NotifyIconW` + popup menu (or UI host) |
+| Tray icon, menu, tooltip | Electron `Tray` + `Menu`, rebuilt when its template changes | `tray-icon`; the menu is a model built from the planner state (status lines, skip, pause lengths from `pauseBreaksDurations`, resume, reset, quit) and rebuilt only when it changes. Empty during a strict-mode break unless `showTrayMenuInStrictMode`; Quit is refused then, as upstream. No Preferences item until the settings window exists |
 | Notifications | HTML5 `Notification` in a hidden renderer window | Windows toast (AppUserModelID `net.hovancik.stretchly` upstream; ours must differ) |
-| Sounds (WAV, volume 0–1) | `new Audio()` in a hidden renderer window | PCM WAV scaled by volume in memory, then `PlaySoundW(SND_MEMORY \| SND_ASYNC)`; no audio crate (ADR 0001) |
-| Global shortcuts (8 configurable, plus end-break) | `globalShortcut` | `RegisterHotKey` |
-| Autostart | `app.setLoginItemSettings`; Store build uses StartupTask | `HKCU\...\Run` value; MSIX `StartupTask` if we ship MSIX |
+| Sounds (WAV, volume 0–1) | `new Audio()` in a hidden renderer window | PCM WAV scaled by volume in memory, then `PlaySoundW(SND_MEMORY \| SND_ASYNC)`; no audio crate (ADR 0001). Start sound at break start; end sound when a break ends on time, not when an exclusion ends it. Only the user's `<name>.wav` from `%APPDATA%\stretch-core\audio` plays: Stretchly's WAVs are not bundled until their licence is known (ADR 0001) |
+| Global shortcuts (8 configurable, plus end-break) | `globalShortcut` | Not ported (decided 2026-11-09) |
+| Autostart | `app.setLoginItemSettings`; Store build uses StartupTask | `HKCU\...\Run` value `StretchCore`, synced with `openAtLogin` at every start as upstream; MSIX `StartupTask` if we ship MSIX |
 | Single instance + CLI commands | `requestSingleInstanceLock`, `second-instance` argv | Named mutex + WM_COPYDATA to the hidden signal window |
 | Break windows on all/primary/cursor display, top-most, not focusable, kiosk/fullscreen | `BrowserWindow` per display | Window placement and z-order rules belong to the core/UI contract; drawing belongs to the UI host |
 | Logs | `electron-log` | `tracing` to `%APPDATA%\stretch-core\logs\main.log`, moved to `main.old.log` past 1 MB at start, as electron-log |

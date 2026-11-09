@@ -1,68 +1,43 @@
 //! The app's behaviour without Windows: signals and menu choices go in with the time,
 //! toasts and the next wake-up come out. `main.rs` only connects this to the OS.
 
+mod break_screen;
 mod command;
+mod menu;
 mod status;
 
-use breaks::{BreaksPlanner, Event};
+use breaks::{BreakTime, BreaksPlanner, Event};
 use fastrand::Rng;
 use i18n::Translator;
 use ideas::{BreakIdea, Ideas};
 use platform::Signal;
 use settings::Settings;
 
+pub use break_screen::{BreakButton, BreakScreen, countdown, ring_commands};
+pub use menu::{MenuAction, MenuEntry};
+
 /// How often to check for the user's return while they are away (no input event exists for that).
 const AWAY_CHECK_MS: i64 = 2_000;
-pub const HOUR_MS: i64 = 3_600_000;
 const FOCUS_ASSIST_UNSUPPORTED: i32 = -1;
-
-/// Tray menu choices. `id` is the menu item id, so a typo cannot silently disable an item.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MenuAction {
-    Resume,
-    PauseHour,
-    PauseUntilMorning,
-    PauseIndefinitely,
-    SkipToMini,
-    SkipToLong,
-    Reset,
-    Quit,
-}
-
-impl MenuAction {
-    const ALL: [Self; 8] = [
-        Self::Resume,
-        Self::PauseHour,
-        Self::PauseUntilMorning,
-        Self::PauseIndefinitely,
-        Self::SkipToMini,
-        Self::SkipToLong,
-        Self::Reset,
-        Self::Quit,
-    ];
-
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Resume => "resume",
-            Self::PauseHour => "pause-hour",
-            Self::PauseUntilMorning => "pause-morning",
-            Self::PauseIndefinitely => "pause-forever",
-            Self::SkipToMini => "skip-mini",
-            Self::SkipToLong => "skip-long",
-            Self::Reset => "reset",
-            Self::Quit => "quit",
-        }
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|action| action.id() == id)
-    }
-}
+/// The sound name that means "play nothing".
+const SILENCE: &str = "silence";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toast {
     pub title: String,
     pub text: String,
+}
+
+/// What the app carries out after a signal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Effect {
+    Toast(Toast),
+    /// Play the sound with this name, such as `crystal-glass`, at the settings' volume.
+    Sound(String),
+    /// Open the break window with these words.
+    ShowBreak(BreakScreen),
+    /// Close the break window.
+    CloseBreak,
 }
 
 /// The next timer: fire after `delay` ms; Windows may shift it by `tolerance` ms to batch wake-ups.
@@ -130,13 +105,13 @@ impl Core {
         now: i64,
         idle: i64,
         os: &impl Environment,
-    ) -> Vec<Toast> {
+    ) -> Vec<Effect> {
         match signal {
             Signal::Timer => {
                 self.planner.idle(now, idle);
-                let mut toasts = self.check_app_exclusion(now, os);
-                toasts.extend(self.run_due_steps(now));
-                return toasts;
+                let mut effects = self.check_app_exclusion(now, os);
+                effects.extend(self.run_due_steps(now));
+                return effects;
             }
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
             Signal::Resume | Signal::Unlock => self.planner.wake(now),
@@ -155,7 +130,7 @@ impl Core {
             .then(|| self.exclusion_checked_at + settings.app_exclusions_check_interval)
     }
 
-    fn check_app_exclusion(&mut self, now: i64, os: &impl Environment) -> Vec<Toast> {
+    fn check_app_exclusion(&mut self, now: i64, os: &impl Environment) -> Vec<Effect> {
         if !self.app_exclusion_check_due().is_some_and(|due| due <= now) {
             return Vec::new();
         }
@@ -166,41 +141,71 @@ impl Core {
         };
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         let events = self.planner.processes_changed(now, &names);
+        // A break that an exclusion ends gets no end sound, as upstream.
         events
             .into_iter()
-            .filter_map(|event| self.carry_out(event, now))
+            .flat_map(|event| self.carry_out(event, false))
             .collect()
     }
 
     /// Several steps can be due at once, for example after a long busy period.
-    fn run_due_steps(&mut self, now: i64) -> Vec<Toast> {
-        let mut toasts = Vec::new();
+    fn run_due_steps(&mut self, now: i64) -> Vec<Effect> {
+        let mut effects = Vec::new();
         while self
             .planner
             .deadline()
             .is_some_and(|deadline| deadline <= now)
         {
             for event in self.planner.advance(now) {
-                toasts.extend(self.carry_out(event, now));
+                effects.extend(self.carry_out(event, true));
             }
         }
-        toasts
+        effects
     }
 
-    fn carry_out(&mut self, event: Event, now: i64) -> Option<Toast> {
-        let event = match event {
-            // shortcut: no break window yet to press "Finish"; finish at once. Wire to the UI when it exists.
-            Event::AwaitMiniBreakFinish | Event::AwaitLongBreakFinish => {
-                self.planner.finish_break(now)?
+    /// `on_time` is false when something other than the break's own time ended it.
+    fn carry_out(&mut self, event: Event, on_time: bool) -> Vec<Effect> {
+        let window = match event {
+            Event::StartMiniBreak | Event::StartLongBreak => {
+                let long = event == Event::StartLongBreak;
+                let idea = self.take_idea(long);
+                Some(Effect::ShowBreak(BreakScreen::new(&self.words, long, idea)))
             }
-            event => event,
+            Event::FinishMiniBreak | Event::FinishLongBreak => Some(Effect::CloseBreak),
+            // The window stays and offers Finish (BreakTime::awaiting_finish).
+            _ => None,
         };
-        let idea = match event {
-            Event::StartMiniBreak => self.take_idea(false),
-            Event::StartLongBreak => self.take_idea(true),
-            _ => BreakIdea::default(),
+        let sound = sound(self.settings(), &event, on_time).map(Effect::Sound);
+        let toast = toast(&self.words, self.settings(), &event).map(Effect::Toast);
+        toast.into_iter().chain(window).chain(sound).collect()
+    }
+
+    /// The running break for the break window; `None` outside a break.
+    pub fn break_time(&self, now: i64) -> Option<BreakTime> {
+        self.planner.break_time(now)
+    }
+
+    /// A break window button. Skip ends the break without its end sound, as upstream.
+    pub fn on_break_button(&mut self, button: BreakButton, now: i64) -> Vec<Effect> {
+        let Some(time) = self.planner.break_time(now) else {
+            return Vec::new();
         };
-        toast(&self.words, self.settings(), &event, idea)
+        let offered = match button {
+            BreakButton::Postpone => time.may_postpone,
+            BreakButton::Skip => time.may_skip,
+            BreakButton::Finish => time.awaiting_finish,
+        };
+        if !offered {
+            return Vec::new();
+        }
+        if button == BreakButton::Postpone {
+            self.planner.postpone(now);
+            return vec![Effect::CloseBreak];
+        }
+        match self.planner.finish_break(now) {
+            Some(event) => self.carry_out(event, button == BreakButton::Finish),
+            None => Vec::new(),
+        }
     }
 
     /// The words for a starting break: the `mini` or `long` command's words, else the next idea.
@@ -228,7 +233,7 @@ impl Core {
     pub fn on_menu(&mut self, action: MenuAction, now: i64, os: &impl Environment) {
         match action {
             MenuAction::Resume if self.planner.paused() => self.planner.resume(now),
-            MenuAction::PauseHour => self.planner.pause(now, HOUR_MS),
+            MenuAction::Pause(duration) => self.planner.pause(now, duration),
             MenuAction::PauseUntilMorning => {
                 let duration = os
                     .until_morning(self.settings())
@@ -241,6 +246,16 @@ impl Core {
             MenuAction::Reset => self.planner.reset(now),
             MenuAction::Resume | MenuAction::Quit => {}
         }
+    }
+
+    /// The tray menu for the current state.
+    pub fn menu(&self, now: i64) -> Vec<MenuEntry> {
+        menu::tray_menu(&self.planner, &self.words, now)
+    }
+
+    /// Upstream refuses to quit during a strict-mode break.
+    pub fn may_quit(&self) -> bool {
+        !menu::in_strict_break(&self.planner)
     }
 
     /// The one timer the app needs: the earliest of the break deadline, the idle check and
@@ -290,9 +305,23 @@ impl Core {
     }
 }
 
-/// Upstream shows only the notifications and `resumingBreaks`; the break toasts stand in
-/// for the break window until it exists.
-fn toast(words: &Translator, s: &Settings, event: &Event, idea: BreakIdea) -> Option<Toast> {
+/// The start sound when a break starts, and the end sound when it ends on time.
+fn sound(s: &Settings, event: &Event, on_time: bool) -> Option<String> {
+    if s.silent_notifications {
+        return None;
+    }
+    let name = match event {
+        Event::StartMiniBreak => &s.mini_break_start_sound,
+        Event::StartLongBreak => &s.long_break_start_sound,
+        Event::FinishMiniBreak if on_time => &s.mini_break_audio,
+        Event::FinishLongBreak if on_time => &s.long_break_audio,
+        _ => return None,
+    };
+    (name != SILENCE).then(|| name.clone())
+}
+
+/// Upstream shows only the notifications and `resumingBreaks`; breaks get the break window.
+fn toast(words: &Translator, s: &Settings, event: &Event) -> Option<Toast> {
     let seconds = |interval: i64| (interval / 1000).to_string();
     let (title, text) = match event {
         Event::MiniBreakNotification => (
@@ -309,17 +338,10 @@ fn toast(words: &Translator, s: &Settings, event: &Event, idea: BreakIdea) -> Op
             ),
             String::new(),
         ),
-        Event::StartMiniBreak => (words.text("main.toMiniBreak"), idea.text),
-        Event::StartLongBreak => (
-            words.text("main.toLongBreak"),
-            [idea.title, idea.text]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(": "),
-        ),
         Event::ResumeBreaks => (words.text("main.resumingBreaks"), String::new()),
-        Event::FinishMiniBreak
+        Event::StartMiniBreak
+        | Event::StartLongBreak
+        | Event::FinishMiniBreak
         | Event::FinishLongBreak
         | Event::AwaitMiniBreakFinish
         | Event::AwaitLongBreakFinish => return None,
@@ -335,6 +357,7 @@ mod tests {
     use super::*;
 
     const USER_TIMER_MINIMUM_MS: i64 = 10;
+    const HOUR_MS: i64 = 3_600_000;
 
     /// Short demo timings: mini every 30 s (notice 10 s before), 10 s long; long break every third.
     const DEMO: &str = r#""miniBreakInterval":30000,"miniBreakDuration":10000,
@@ -347,12 +370,15 @@ mod tests {
         now: i64,
         /// Start of the user's current absence; `None` while they use the PC.
         away_since: Option<i64>,
-        /// (time, toast title) for each toast.
+        /// (time, title) for each toast and each break window.
         log: Vec<(i64, String)>,
         wakes: usize,
         os: FakeOs,
-        /// Text of the last toast.
+        /// Text of the last toast, or headline and detail of the last break window.
         last_text: String,
+        window_open: bool,
+        /// (time, sound name) for each sound.
+        sounds: Vec<(i64, String)>,
     }
 
     #[derive(Default)]
@@ -389,6 +415,8 @@ mod tests {
                     ..FakeOs::default()
                 },
                 last_text: String::new(),
+                window_open: false,
+                sounds: Vec::new(),
             }
         }
 
@@ -411,10 +439,35 @@ mod tests {
         }
 
         fn signal(&mut self, signal: Signal) {
-            let toasts = self.core.on_signal(signal, self.now, self.idle(), &self.os);
-            for toast in toasts {
-                self.log.push((self.now, toast.title));
-                self.last_text = toast.text;
+            let effects = self.core.on_signal(signal, self.now, self.idle(), &self.os);
+            for effect in effects {
+                self.record(effect);
+            }
+        }
+
+        fn record(&mut self, effect: Effect) {
+            match effect {
+                Effect::Toast(toast) => {
+                    self.log.push((self.now, toast.title));
+                    self.last_text = toast.text;
+                }
+                Effect::Sound(name) => self.sounds.push((self.now, name)),
+                Effect::ShowBreak(screen) => {
+                    self.log.push((self.now, screen.kind));
+                    self.last_text = [screen.headline, screen.detail]
+                        .into_iter()
+                        .filter(|part| !part.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(": ");
+                    self.window_open = true;
+                }
+                Effect::CloseBreak => self.window_open = false,
+            }
+        }
+
+        fn press(&mut self, button: BreakButton) {
+            for effect in self.core.on_break_button(button, self.now) {
+                self.record(effect);
             }
         }
 
@@ -481,7 +534,8 @@ Next Long break after 2 Mini breaks"
     fn pause_for_an_hour_then_breaks_restart() {
         let mut sim = Sim::new("");
         sim.run_until(5_000);
-        sim.core.on_menu(MenuAction::PauseHour, sim.now, &sim.os);
+        sim.core
+            .on_menu(MenuAction::Pause(HOUR_MS), sim.now, &sim.os);
         assert_eq!(
             status(&sim.core, sim.now),
             "Paused - Resuming in about 1 hour"
@@ -671,24 +725,87 @@ Next Long break after 2 Mini breaks"
     }
 
     #[test]
-    fn manual_finish_ends_the_break_at_once_until_the_window_exists() {
-        let mut sim = Sim::new(r#","miniBreakManualFinish":true"#);
-        sim.run_until(65_000);
+    fn manual_finish_keeps_the_window_until_finish_is_pressed() {
+        let sounds = r#","miniBreakManualFinish":true,"miniBreakAudio":"wind-chime""#;
+        let mut sim = Sim::new(sounds);
+        sim.run_until(50_000);
+        assert!(sim.window_open && sim.core.break_time(sim.now).unwrap().awaiting_finish);
+        sim.press(BreakButton::Finish);
+        assert!(!sim.window_open);
+        assert_eq!(sim.sounds.last(), Some(&(50_000, "wind-chime".to_owned())));
+        sim.run_until(75_000);
         assert_eq!(
             sim.take_log(),
             log(&[
                 (20_000, "Mini break in 10 seconds"),
                 (30_000, "Mini break"),
-                // Finished at 40 s, so the next break is 30 s later.
-                (60_000, "Mini break in 10 seconds"),
+                // Finished at 50 s, so the next break is 30 s later.
+                (70_000, "Mini break in 10 seconds"),
             ])
         );
     }
 
     #[test]
-    fn every_menu_id_leads_back_to_its_own_action() {
-        for action in MenuAction::ALL {
-            assert_eq!(MenuAction::from_id(action.id()), Some(action));
-        }
+    fn postpone_and_skip_close_the_window_only_when_offered() {
+        let mut sim = Sim::new(r#","miniBreakPostpone":true,"miniBreakAudio":"wind-chime""#);
+        sim.run_until(31_000);
+        sim.press(BreakButton::Skip);
+        assert!(sim.window_open, "no skip while postponing is offered");
+        sim.press(BreakButton::Postpone);
+        assert!(!sim.window_open && !sim.core.planner.in_break());
+
+        let mut sim = Sim::new(r#","miniBreakPostpone":false,"miniBreakAudio":"wind-chime""#);
+        sim.run_until(31_000);
+        sim.press(BreakButton::Finish);
+        assert!(sim.window_open, "finish waits for the end of the time");
+        sim.press(BreakButton::Skip);
+        assert!(!sim.window_open);
+        assert!(sim.sounds.is_empty(), "skip plays no end sound");
+    }
+
+    #[test]
+    fn breaks_play_their_start_sound_and_their_end_sound_when_on_time() {
+        let sounds = r#","miniBreakStartSound":"tic-toc","miniBreakAudio":"wind-chime""#;
+        let mut sim = Sim::new(sounds);
+        sim.run_until(41_000);
+        assert_eq!(
+            sim.sounds,
+            [
+                (30_000, "tic-toc".to_owned()),
+                (40_000, "wind-chime".to_owned())
+            ]
+        );
+
+        // "silence" and silent notifications play nothing.
+        let mut quiet = Sim::new(r#","miniBreakAudio":"silence""#);
+        quiet.run_until(41_000);
+        assert!(quiet.sounds.is_empty(), "{:?}", quiet.sounds);
+        let mut silent = Sim::new(&format!("{sounds},\"silentNotifications\":true"));
+        silent.run_until(41_000);
+        assert!(silent.sounds.is_empty());
+    }
+
+    #[test]
+    fn a_break_that_an_exclusion_ends_plays_no_end_sound() {
+        let mut sim =
+            Sim::new(r#","appExclusions":[{"rule":"pause","active":true,"commands":["meeting"]}]"#);
+        sim.run_until(31_000);
+        sim.os.running = Some(vec!["meeting.exe".into()]);
+        sim.run_until(45_000);
+        assert!(
+            !sim.core.planner.in_break(),
+            "the exclusion ended the break"
+        );
+        // The default start sound is "silence"; the default end sound would be "crystal-glass".
+        assert!(sim.sounds.is_empty(), "{:?}", sim.sounds);
+    }
+
+    #[test]
+    fn quit_waits_for_the_end_of_a_strict_break() {
+        let mut sim = Sim::new(r#","miniBreakStrictMode":true"#);
+        sim.run_until(31_000);
+        assert!(!sim.core.may_quit());
+        sim.run_until(41_000);
+        assert!(sim.core.may_quit());
     }
 }

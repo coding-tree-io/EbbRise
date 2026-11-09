@@ -77,3 +77,18 @@ fn unreadable_stretchly_config_fails_the_import_so_the_next_start_retries() {
     assert!(!own.exists());
     fs::remove_dir_all(folder).unwrap();
 }
+
+#[test]
+fn pause_durations_keep_only_whole_minutes_within_the_timer_limit() {
+    let settings = Settings::from_json(
+        r#"{"pauseBreaksDurations":[{"duration":1800000},{"duration":0,"shortcut":""},
+        {"duration":90000,"shortcut":""},{"duration":2147520000,"shortcut":""},
+        {"duration":3600000,"shortcut":"Ctrl+P"}]}"#,
+    )
+    .unwrap();
+    let kept: Vec<(i64, &str)> = settings
+        .pause_durations()
+        .map(|entry| (entry.duration, entry.shortcut.as_str()))
+        .collect();
+    assert_eq!(kept, [(1_800_000, ""), (3_600_000, "Ctrl+P")]);
+}

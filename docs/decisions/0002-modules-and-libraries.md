@@ -50,7 +50,7 @@ Versions are pinned at scaffold time.
 | --- | --- | --- |
 | Win32 / WinRT | `windows` | Official bindings |
 | Tray icon + menu | `tray-icon`, `muda` | Icon re-add after Explorer restart, high-DPI icons, native menus |
-| Global shortcuts | `global-hotkey` | `RegisterHotKey` and shortcut parsing; convert Stretchly's `CmdOrCtrl+X` format |
+| Global shortcuts | none | Not ported (decided 2026-11-09); the shortcut settings stay in the config file unused |
 | Toasts | `tauri-winrt-notification` | Toast XML; AppUserModelID registration (R2) stays ours |
 | Single instance + CLI forwarding | none (Win32) | Named mutex finds the running app; the second process sends its arguments to the app's hidden window with WM_COPYDATA. No crate, no pipe thread, and the command runs on the UI thread like every other signal |
 | Autostart | `auto-launch` | `HKCU\...\Run` |

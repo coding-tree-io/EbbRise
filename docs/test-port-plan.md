@@ -54,8 +54,7 @@ Rules the port changes (upstream polls every 2 s; the port reacts to events):
 | --- | --- |
 | appIcon.js (96 of 97) | File-name mapping; one table row set covers it |
 | scheduler.js | Covered by Tier A |
-| breakShortcuts.js | Shortcut actions call the same planner commands as Tier A |
-| pauseMenu.js | Menu model; belongs to the UI |
+| breakShortcuts.js (all) | Global hotkeys are not ported |
 | runOnce.js, ideasLoader.js | Trivial JS helpers |
 | versionChecker.js | Network call; one manual check is enough |
 | utils.js Linux/X11/Flatpak/Snap/Store helpers, `shouldShowNotificationTitle` | Not Windows, or OS-version cosmetics |
