@@ -125,3 +125,19 @@ fn clocks_follow_real_time_and_real_input() {
     assert_eq!(unsafe { SendInput(&[input], size_of::<INPUT>() as i32) }, 1);
     assert!(idle_ms() < 50, "idle reset by input: {} ms", idle_ms());
 }
+
+#[test]
+fn running_processes_include_this_test() {
+    let this = std::env::current_exe().unwrap();
+    let this = this.file_name().unwrap().to_str().unwrap();
+    let names = platform::running_process_names();
+    assert!(
+        names.iter().any(|name| name == this),
+        "{this} not in {names:?}"
+    );
+    assert!(
+        names
+            .iter()
+            .any(|name| name == "explorer.exe" || name == "csrss.exe")
+    );
+}

@@ -6,7 +6,7 @@ Upstream reference: [hovancik/stretchly](https://github.com/hovancik/stretchly) 
 
 ## Status
 
-Stage: platform-free core done and tested (`settings`, `breaks`, `commands`). Windows adapters (`platform`: signal window, timer, clocks, Focus Assist, toasts, single instance) and a tray-only app (`app`) run. CLI forwarding, app exclusion polling and the Slint UI are not wired yet.
+Stage: platform-free core done and tested (`settings`, `breaks`, `commands`). Windows adapters (`platform`: signal window, timer, clocks, Focus Assist, running processes, toasts, single instance) and a tray-only app (`app`) run, with settings saved and app exclusions checked. CLI forwarding, global hotkeys and the Slint UI are not wired yet.
 
 - [Backend inventory](docs/backend-inventory.md): every backend behaviour and OS integration to port, with the Windows mechanism for each.
 - [ADR 0001: technology stack](docs/decisions/0001-technology-stack.md): Rust backend, Slint UI, Windows only.

@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use breaks::until_morning;
-use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
+use platform::{Signal, SignalWindow, awake_ms, idle_ms, running_process_names, toast};
 use settings::Settings;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -77,7 +77,10 @@ fn main() {
 
 impl App {
     fn on_signal(&mut self, signal: Signal) {
-        for toast in self.core.on_signal(signal, awake_ms(), idle_ms()) {
+        for toast in self
+            .core
+            .on_signal(signal, awake_ms(), idle_ms(), running_process_names)
+        {
             toast::show(
                 APP_ID,
                 &toast.title,

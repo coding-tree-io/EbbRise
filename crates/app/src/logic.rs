@@ -68,6 +68,7 @@ pub struct Wake {
 
 pub struct Core {
     planner: BreaksPlanner,
+    exclusion_checked_at: i64,
 }
 
 impl Core {
@@ -75,7 +76,10 @@ impl Core {
     pub fn new(settings: Settings, now: i64, focus_assist: Option<i32>) -> Self {
         let mut planner = BreaksPlanner::new(settings, now);
         planner.focus_assist(now, focus_assist.unwrap_or(FOCUS_ASSIST_UNSUPPORTED));
-        Self { planner }
+        Self {
+            planner,
+            exclusion_checked_at: now,
+        }
     }
 
     pub fn settings(&self) -> &Settings {
@@ -83,17 +87,51 @@ impl Core {
     }
 
     /// `now` is awake time and `idle` is time since the last input, both in ms.
-    pub fn on_signal(&mut self, signal: Signal, now: i64, idle: i64) -> Vec<Toast> {
+    /// `processes` lists running process names; it is asked only when an app exclusion check is due.
+    pub fn on_signal(
+        &mut self,
+        signal: Signal,
+        now: i64,
+        idle: i64,
+        processes: impl FnOnce() -> Vec<String>,
+    ) -> Vec<Toast> {
         match signal {
             Signal::Timer => {
                 self.planner.idle(now, idle);
-                return self.run_due_steps(now);
+                let mut toasts = self.check_app_exclusion(now, processes);
+                toasts.extend(self.run_due_steps(now));
+                return toasts;
             }
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
             Signal::Resume | Signal::Unlock => self.planner.wake(now),
             Signal::FocusAssist(value) => self.planner.focus_assist(now, value),
         }
         Vec::new()
+    }
+
+    /// When the next app exclusion check is due; `None` without an active rule.
+    fn app_exclusion_check_due(&self) -> Option<i64> {
+        let settings = self.settings();
+        let active_rule = settings.app_exclusions.iter().any(|rule| rule.active);
+        active_rule.then(|| self.exclusion_checked_at + settings.app_exclusions_check_interval)
+    }
+
+    fn check_app_exclusion(
+        &mut self,
+        now: i64,
+        processes: impl FnOnce() -> Vec<String>,
+    ) -> Vec<Toast> {
+        if !self.app_exclusion_check_due().is_some_and(|due| due <= now) {
+            return Vec::new();
+        }
+        self.exclusion_checked_at = now;
+        let names = processes();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let events = self.planner.processes_changed(now, &names);
+        events
+            .into_iter()
+            .filter_map(|event| self.carry_out(event, now))
+            .collect()
     }
 
     /// Several steps can be due at once, for example after a long busy period.
@@ -145,33 +183,34 @@ impl Core {
         }
     }
 
-    /// The one timer the app needs: the earlier of the break deadline and the idle check.
+    /// The one timer the app needs: the earliest of the break deadline, the idle check and
+    /// the app exclusion check. On a tie the break deadline wins, with its tighter tolerance.
     pub fn next_wake(&self, now: i64, idle: i64) -> Option<Wake> {
         let settings = self.settings();
-        let break_due = self.planner.deadline().map(|deadline| deadline - now);
+        let break_due = self.planner.deadline().map(|deadline| Wake {
+            delay: deadline - now,
+            tolerance: 10,
+        });
         let idle_check = settings.natural_breaks.then(|| {
-            if self.planner.away() {
+            let delay = if self.planner.away() {
                 AWAY_CHECK_MS
             } else {
                 let earliest_reset_crossing = settings.natural_breaks_inactivity_reset_time - idle;
                 earliest_reset_crossing.max(1_000)
+            };
+            Wake {
+                delay,
+                tolerance: 1_000,
             }
         });
-        match (break_due, idle_check) {
-            (Some(due), Some(check)) if check < due => Some(Wake {
-                delay: check,
-                tolerance: 1_000,
-            }),
-            (Some(due), _) => Some(Wake {
-                delay: due,
-                tolerance: 10,
-            }),
-            (None, Some(check)) => Some(Wake {
-                delay: check,
-                tolerance: 1_000,
-            }),
-            (None, None) => None,
-        }
+        let exclusion_check = self.app_exclusion_check_due().map(|due| Wake {
+            delay: (due - now).max(0),
+            tolerance: 1_000,
+        });
+        [break_due, idle_check, exclusion_check]
+            .into_iter()
+            .flatten()
+            .min_by_key(|wake| (wake.delay, wake.tolerance))
     }
 
     /// Tray tooltip and whether to show the paused icon.
@@ -267,6 +306,9 @@ mod tests {
         /// (time, toast title) for each toast.
         log: Vec<(i64, String)>,
         wakes: usize,
+        /// Process names Windows would list now.
+        running: Vec<String>,
+        process_reads: usize,
     }
 
     impl Sim {
@@ -279,6 +321,8 @@ mod tests {
                 away_since: None,
                 log: Vec::new(),
                 wakes: 0,
+                running: Vec::new(),
+                process_reads: 0,
             }
         }
 
@@ -301,7 +345,10 @@ mod tests {
         }
 
         fn signal(&mut self, signal: Signal) {
-            let toasts = self.core.on_signal(signal, self.now, self.idle());
+            let toasts = self.core.on_signal(signal, self.now, self.idle(), || {
+                self.process_reads += 1;
+                self.running.clone()
+            });
             self.log
                 .extend(toasts.into_iter().map(|toast| (self.now, toast.title)));
         }
@@ -338,6 +385,10 @@ mod tests {
         );
         // One wake-up per step: no polling while the user works.
         assert_eq!(sim.wakes, 9);
+        assert_eq!(
+            sim.process_reads, 0,
+            "no active exclusion rule, no process list"
+        );
     }
 
     #[test]
@@ -425,6 +476,33 @@ mod tests {
         sim.signal(Signal::FocusAssist(0));
         sim.run_until(75_000);
         assert_eq!(sim.take_log(), log(&[(70_000, "Mini break soon")]));
+    }
+
+    #[test]
+    fn pause_exclusion_holds_breaks_while_its_app_runs() {
+        let mut sim =
+            Sim::new(r#","appExclusions":[{"rule":"pause","active":true,"commands":["meeting"]}]"#);
+        sim.running = vec!["meeting.exe".into()];
+        sim.run_until(50_000);
+        assert_eq!(sim.take_log(), log(&[]));
+
+        sim.running.clear();
+        sim.run_until(80_000);
+        // The next 2 s check, at 52 s, sees the app gone and restarts the cycle.
+        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
+        assert_eq!(sim.process_reads, 40);
+    }
+
+    #[test]
+    fn resume_exclusion_allows_breaks_only_while_its_app_runs() {
+        let mut sim =
+            Sim::new(r#","appExclusions":[{"rule":"resume","active":true,"commands":["focus"]}]"#);
+        sim.run_until(50_000);
+        assert_eq!(sim.take_log(), log(&[]));
+
+        sim.running = vec!["focus-timer.exe".into()];
+        sim.run_until(75_000);
+        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
     }
 
     #[test]
