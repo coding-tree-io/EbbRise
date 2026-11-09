@@ -1,18 +1,47 @@
-use crate::Settings;
+use crate::{Settings, can_postpone};
 
+mod holds;
+
+/// Upstream `skipToMiniBreak (delay = 100)`.
+const SKIP_DELAY_MS: i64 = 100;
+
+/// A step the planner took; the caller carries it out (toast, break window, sound).
+///
+/// The same names mark the pending step (upstream's scheduler `reference`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
+    /// Warn that a Mini break comes in `mini_break_notification_interval`.
     MiniBreakNotification,
+    /// Warn that a Long break comes in `long_break_notification_interval`.
     LongBreakNotification,
+    /// A Mini break starts now.
     StartMiniBreak,
+    /// A Long break starts now.
     StartLongBreak,
+    /// The Mini break ended; the next break is planned.
     FinishMiniBreak,
+    /// The Long break ended; the next break is planned.
     FinishLongBreak,
+    /// The Mini break time is over; wait for [`BreaksPlanner::finish_break`] (manual finish).
     AwaitMiniBreakFinish,
+    /// The Long break time is over; wait for [`BreaksPlanner::finish_break`] (manual finish).
     AwaitLongBreakFinish,
+    /// A timed pause ended and breaks restarted.
     ResumeBreaks,
 }
 
+/// Stretchly's break schedule as a sans-IO state machine (upstream `breaksPlanner.js`).
+///
+/// Every method takes `now`, a monotonic time in ms; the caller wakes it at [`Self::deadline`]
+/// and calls [`Self::advance`]. Durations are in ms.
+///
+/// ```
+/// use breaks::{BreaksPlanner, Event, Settings};
+/// let settings = Settings { mini_break_notification: false, ..Settings::default() };
+/// let mut planner = BreaksPlanner::new(settings, 0);
+/// assert_eq!(planner.deadline(), Some(600_000));
+/// assert_eq!(planner.advance(600_000), vec![Event::StartMiniBreak]);
+/// ```
 pub struct BreaksPlanner {
     settings: Settings,
     break_number: i64,
@@ -21,49 +50,60 @@ pub struct BreaksPlanner {
     delay: i64,
     paused: bool,
     dnd: bool,
-    idle_cleared: bool,
-    idle_long: bool,
+    /// Idle for longer than the natural-break reset time (upstream `isSchedulerCleared`).
+    away: bool,
     exclusion: bool,
     suspended: bool,
     next: Event,
 }
 
 impl BreaksPlanner {
+    /// Pause duration that means "until resumed" (Stretchly's value).
+    pub const INDEFINITELY: i64 = 1;
+
+    /// Plans the first break from `now`.
+    pub fn new(settings: Settings, now: i64) -> Self {
+        let mut planner = Self {
+            settings,
+            break_number: 0,
+            postpones: 0,
+            deadline: None,
+            delay: 0,
+            paused: false,
+            dnd: false,
+            away: false,
+            exclusion: false,
+            suspended: false,
+            next: Event::StartMiniBreak,
+        };
+        planner.plan_next(now);
+        planner
+    }
+
+    /// The settings the planner runs with.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// When the pending step is due; `None` when nothing is scheduled (held, paused
+    /// indefinitely, both break types off, or waiting for a manual finish).
     pub fn deadline(&self) -> Option<i64> {
         self.deadline
     }
 
-    pub fn new(settings: Settings, now: i64) -> Self {
-        let (deadline, next) = if settings.mini_break {
-            (
-                Some(now + settings.mini_break_interval),
-                Event::StartMiniBreak,
-            )
-        } else if settings.long_break {
-            (
-                Some(now + settings.mini_break_interval * (settings.long_break_interval + 1)),
-                Event::StartLongBreak,
-            )
-        } else {
-            (None, Event::StartMiniBreak)
-        };
-        let delay = deadline.map_or(0, |deadline| deadline - now);
-        let mut planner = Self {
-            settings,
-            break_number: 1,
-            postpones: 0,
-            deadline,
-            delay,
-            paused: false,
-            dnd: false,
-            idle_cleared: false,
-            idle_long: false,
-            exclusion: false,
-            suspended: false,
-            next,
-        };
-        planner.add_notification();
-        planner
+    /// Breaks are paused by the user or by suspend/lock.
+    pub fn paused(&self) -> bool {
+        self.paused
+    }
+
+    /// The user has been idle longer than the natural-break reset time.
+    pub fn away(&self) -> bool {
+        self.away
+    }
+
+    /// A break is running: it has started and not yet finished.
+    pub fn in_break(&self) -> bool {
+        matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak)
     }
 
     fn add_notification(&mut self) {
@@ -85,45 +125,48 @@ impl BreaksPlanner {
         }
     }
 
+    /// Moves the running break `*_postpone_time` later; returns whether it was allowed.
+    ///
+    /// Refused when postponing is off, the limit is used up, or too much of the break passed.
     pub fn postpone(&mut self, now: i64) -> bool {
-        let (delay, limit, notification, offset, event, enabled, percent) = match self.next {
+        let s = &self.settings;
+        let (delay, limit, notification_interval, event, enabled, percent) = match self.next {
             Event::FinishMiniBreak => (
-                self.settings.mini_break_postpone_time,
-                self.settings.mini_break_postpones_limit,
-                self.settings.mini_break_notification,
-                self.settings.mini_break_notification_interval,
+                s.mini_break_postpone_time,
+                s.mini_break_postpones_limit,
+                s.mini_break_notification_interval,
                 Event::StartMiniBreak,
-                self.settings.mini_break_postpone,
-                self.settings.mini_break_postponable_duration_percent,
+                s.mini_break_postpone,
+                s.mini_break_postponable_duration_percent,
             ),
             Event::FinishLongBreak => (
-                self.settings.long_break_postpone_time,
-                self.settings.long_break_postpones_limit,
-                self.settings.long_break_notification,
-                self.settings.long_break_notification_interval,
+                s.long_break_postpone_time,
+                s.long_break_postpones_limit,
+                s.long_break_notification_interval,
                 Event::StartLongBreak,
-                self.settings.long_break_postpone,
-                self.settings.long_break_postponable_duration_percent,
+                s.long_break_postpone,
+                s.long_break_postponable_duration_percent,
             ),
             _ => return false,
         };
         let Some(deadline) = self.deadline else {
             return false;
         };
-        let elapsed_percent = (now - (deadline - self.delay)) as f64 / self.delay as f64 * 100.0;
-        if !enabled || self.postpones >= limit || elapsed_percent > percent as f64 {
+        let passed_percent = (now - (deadline - self.delay)) as f64 / self.delay as f64 * 100.0;
+        if self.postpones >= limit || !can_postpone(enabled, passed_percent, percent as f64) {
             return false;
         }
         self.postpones += 1;
         self.deadline = Some(now + delay);
         self.delay = delay;
         self.next = event;
-        if notification && delay > offset {
+        if delay > notification_interval {
             self.add_notification();
         }
         true
     }
 
+    /// Starts a Mini break shortly; the Mini/Long order then continues from it.
     pub fn skip_to_mini(&mut self, now: i64) {
         if self.settings.mini_break
             && self.settings.long_break
@@ -132,25 +175,27 @@ impl BreaksPlanner {
             self.break_number = 1;
         }
         self.next = Event::StartMiniBreak;
-        self.deadline = Some(now + 100);
-        self.delay = 100;
+        self.deadline = Some(now + SKIP_DELAY_MS);
+        self.delay = SKIP_DELAY_MS;
     }
 
+    /// Starts a Long break shortly; the Mini/Long order then continues from it.
     pub fn skip_to_long(&mut self, now: i64) {
         if self.settings.mini_break && self.settings.long_break {
             self.break_number = self.settings.long_break_interval + 1;
         }
         self.next = Event::StartLongBreak;
-        self.deadline = Some(now + 100);
-        self.delay = 100;
+        self.deadline = Some(now + SKIP_DELAY_MS);
+        self.delay = SKIP_DELAY_MS;
     }
 
+    /// Pauses breaks for `duration` ms, or until [`Self::resume`] with [`Self::INDEFINITELY`].
     pub fn pause(&mut self, now: i64, duration: i64) {
         self.paused = true;
         self.break_number = 0;
         self.postpones = 0;
         self.next = Event::ResumeBreaks;
-        self.deadline = if duration == 1 {
+        self.deadline = if duration == Self::INDEFINITELY {
             None
         } else {
             Some(now + duration)
@@ -158,138 +203,27 @@ impl BreaksPlanner {
         self.delay = duration;
     }
 
+    /// Ends a pause and starts a new break cycle.
+    ///
+    /// Do Not Disturb, if on, still holds the breaks until it ends.
     pub fn resume(&mut self, now: i64) {
-        if self.dnd {
-            return;
-        }
-        *self = Self::new(self.settings.clone(), now);
+        // Upstream restarts its idle and exclusion polls here, and its DND poll finds DND
+        // again a poll later; DND is pushed to us, so its state is kept instead.
+        self.paused = false;
+        self.suspended = false;
+        self.away = false;
+        self.exclusion = false;
+        self.break_number = 0;
+        self.plan_next(now);
     }
 
+    /// Starts a new break cycle (upstream `reset`), the same as [`Self::resume`].
     pub fn reset(&mut self, now: i64) {
         self.resume(now);
     }
 
-    pub fn focus_assist(&mut self, now: i64, value: i32) {
-        if !self.settings.monitor_dnd {
-            return;
-        }
-        let on = value == 1 || value == 2;
-        if self.paused {
-            self.dnd = on;
-            return;
-        }
-        if on && !self.dnd {
-            self.dnd = true;
-            if !matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak) {
-                self.deadline = None;
-            }
-        } else if !on && self.dnd {
-            self.dnd = false;
-            if !self.paused
-                && !self.exclusion
-                && !self.idle_long
-                && !matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak)
-            {
-                self.reset(now);
-            }
-        }
-    }
-
-    pub fn idle(&mut self, now: i64, idle_time: i64) {
-        if !self.settings.natural_breaks {
-            return;
-        }
-        if idle_time > self.settings.natural_breaks_inactivity_reset_time {
-            self.idle_long = true;
-        } else if idle_time < 20_000 {
-            self.idle_long = false;
-        }
-        if idle_time > self.settings.natural_breaks_inactivity_reset_time
-            && !self.paused
-            && !matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak)
-            && self.deadline.is_some()
-        {
-            self.idle_cleared = true;
-            self.deadline = None;
-        } else if idle_time < 20_000 && self.idle_cleared {
-            self.idle_cleared = false;
-            if !self.paused
-                && !self.dnd
-                && !self.exclusion
-                && !matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak)
-            {
-                self.reset(now);
-            }
-        }
-    }
-
-    pub fn app_exclusion(&mut self, now: i64, active: bool) -> Vec<Event> {
-        if self.paused {
-            return Vec::new();
-        }
-        if active && !self.exclusion {
-            self.exclusion = true;
-            let finished = match self.next {
-                Event::FinishMiniBreak => Some(Event::FinishMiniBreak),
-                Event::FinishLongBreak => Some(Event::FinishLongBreak),
-                _ => None,
-            };
-            self.deadline = None;
-            self.break_number = 0;
-            self.postpones = 0;
-            finished.into_iter().collect()
-        } else if !active && self.exclusion {
-            self.exclusion = false;
-            if !self.dnd && !self.idle_long {
-                self.reset(now);
-            }
-            Vec::new()
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn resume_exclusion(&mut self, now: i64, active: bool) {
-        if self.paused || matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak) {
-            return;
-        }
-        self.app_exclusion(now, !active);
-    }
-
-    pub fn processes_changed(&mut self, now: i64, process_names: &[&str]) -> Vec<Event> {
-        let Some(rule) = self.settings.app_exclusions.iter().find(|rule| rule.active) else {
-            return Vec::new();
-        };
-        let matched = rule
-            .commands
-            .iter()
-            .any(|command| process_names.iter().any(|name| name.contains(command)));
-        if rule.rule == "pause" {
-            self.app_exclusion(now, matched)
-        } else {
-            self.resume_exclusion(now, matched);
-            Vec::new()
-        }
-    }
-
-    pub fn suspend(&mut self, now: i64) {
-        if self.settings.pause_for_suspend_or_lock
-            && !self.paused
-            && !self.dnd
-            && !self.idle_cleared
-            && !self.exclusion
-        {
-            self.pause(now, 1);
-            self.suspended = true;
-        }
-    }
-
-    pub fn wake(&mut self, now: i64) {
-        if self.suspended {
-            self.resume(now);
-        }
-    }
-
+    /// Time until the next break starts, including any warning before it; `None` when no
+    /// break is scheduled or one is running.
     pub fn time_to_next_break(&self, now: i64) -> Option<i64> {
         let remaining = self.deadline? - now;
         match self.next {
@@ -304,6 +238,7 @@ impl BreaksPlanner {
         }
     }
 
+    /// How far the wait for the next break has come, 0–100 (for the tray icon).
     pub fn progress_percentage(&self, now: i64) -> u32 {
         let offset = match self.next {
             Event::MiniBreakNotification => self.settings.mini_break_notification_interval,
@@ -319,16 +254,15 @@ impl BreaksPlanner {
         }
     }
 
+    /// Ends the running break and plans the next one; returns the matching `Finish*` event,
+    /// or `None` when no break is running.
     pub fn finish_break(&mut self, now: i64) -> Option<Event> {
-        let event = match self.next {
-            Event::FinishMiniBreak => Event::FinishMiniBreak,
-            Event::FinishLongBreak => Event::FinishLongBreak,
-            _ => return None,
-        };
+        let event = self.in_break().then(|| self.next.clone())?;
         self.plan_next(now);
         Some(event)
     }
 
+    // Upstream `nextBreak`.
     fn plan_next(&mut self, now: i64) {
         self.postpones = 0;
         self.break_number += 1;
@@ -339,10 +273,10 @@ impl BreaksPlanner {
         let long = self.settings.long_break
             && (!self.settings.mini_break
                 || self.break_number % (self.settings.long_break_interval + 1) == 0);
-        let interval = if !self.settings.mini_break {
-            self.settings.mini_break_interval * (self.settings.long_break_interval + 1)
-        } else {
+        let interval = if self.settings.mini_break {
             self.settings.mini_break_interval
+        } else {
+            self.settings.mini_break_interval * (self.settings.long_break_interval + 1)
         };
         self.deadline = Some(now + interval);
         self.delay = interval;
@@ -352,58 +286,49 @@ impl BreaksPlanner {
             Event::StartMiniBreak
         };
         self.add_notification();
-        if self.dnd || self.exclusion {
-            self.deadline = None;
-        }
-        if self.idle_long {
-            self.idle_cleared = true;
+        if self.dnd || self.exclusion || self.away {
             self.deadline = None;
         }
     }
 
+    /// Takes the pending step if it is due at `now` and returns it; empty when nothing is due.
     pub fn advance(&mut self, now: i64) -> Vec<Event> {
         if !self.deadline.is_some_and(|deadline| now >= deadline) {
             return Vec::new();
         }
         let event = self.next.clone();
-        if (event == Event::FinishMiniBreak && self.settings.mini_break_manual_finish)
-            || (event == Event::FinishLongBreak && self.settings.long_break_manual_finish)
-        {
-            self.deadline = None;
-            return vec![if event == Event::FinishMiniBreak {
-                Event::AwaitMiniBreakFinish
-            } else {
-                Event::AwaitLongBreakFinish
-            }];
-        }
-        match event {
-            Event::ResumeBreaks => {
+        let (delay, next) = match event {
+            Event::FinishMiniBreak if self.settings.mini_break_manual_finish => {
                 self.deadline = None;
+                return vec![Event::AwaitMiniBreakFinish];
+            }
+            Event::FinishLongBreak if self.settings.long_break_manual_finish => {
+                self.deadline = None;
+                return vec![Event::AwaitLongBreakFinish];
+            }
+            Event::FinishMiniBreak | Event::FinishLongBreak => {
+                self.plan_next(now);
+                return vec![event];
+            }
+            Event::ResumeBreaks => {
                 self.resume(now);
+                return vec![event];
             }
-            Event::MiniBreakNotification => {
-                self.delay = self.settings.mini_break_notification_interval;
-                self.deadline = Some(now + self.delay);
-                self.next = Event::StartMiniBreak;
-            }
-            Event::LongBreakNotification => {
-                self.delay = self.settings.long_break_notification_interval;
-                self.deadline = Some(now + self.delay);
-                self.next = Event::StartLongBreak;
-            }
-            Event::StartMiniBreak => {
-                self.delay = self.settings.mini_break_duration;
-                self.deadline = Some(now + self.delay);
-                self.next = Event::FinishMiniBreak;
-            }
-            Event::StartLongBreak => {
-                self.delay = self.settings.long_break_duration;
-                self.deadline = Some(now + self.delay);
-                self.next = Event::FinishLongBreak;
-            }
-            Event::FinishMiniBreak | Event::FinishLongBreak => self.plan_next(now),
+            Event::MiniBreakNotification => (
+                self.settings.mini_break_notification_interval,
+                Event::StartMiniBreak,
+            ),
+            Event::LongBreakNotification => (
+                self.settings.long_break_notification_interval,
+                Event::StartLongBreak,
+            ),
+            Event::StartMiniBreak => (self.settings.mini_break_duration, Event::FinishMiniBreak),
+            Event::StartLongBreak => (self.settings.long_break_duration, Event::FinishLongBreak),
             Event::AwaitMiniBreakFinish | Event::AwaitLongBreakFinish => unreachable!(),
-        }
+        };
+        self.delay = delay;
+        self.deadline = Some(now + delay);
+        self.next = next;
         vec![event]
     }
 }

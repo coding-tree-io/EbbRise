@@ -2,6 +2,11 @@ use crate::MorningHour;
 use jiff::{ToSpan, Zoned};
 use sunrise::{Coordinates, SolarDay, SolarEvent};
 
+/// Milliseconds from `now` until the next morning (upstream `untilMorning.js`).
+///
+/// The morning is today if its hour has not started yet, else tomorrow. Latitude and
+/// longitude, in degrees, are used only for sunrise. Returns `None` when the time cannot be
+/// computed, such as an hour outside 0–23 or no sunrise at that place.
 pub fn until_morning(
     now: &Zoned,
     morning: &MorningHour,

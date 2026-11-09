@@ -32,16 +32,11 @@ Alternatives considered: C++ (same speed, weaker safety and tooling), C# NativeA
 
 ### Shape
 
-```
-crates/
-  core/              platform-free state machine, injected clock, no I/O
-  platform-windows/  Win32 adapters: idle, DND, processes, power, session, hotkeys, tray, toast, sound, autostart, pipe
-  app/               exe: message loop, wires adapters to core, settings file, logging, CLI
-```
+The crate split is in [ADR 0002](0002-modules-and-libraries.md).
 
-- One thread runs a Win32 message loop on a message-only window. All OS signals arrive as window messages or waitable-timer events. The core runs on that same thread, so there are no locks.
-- The core exposes `Command` in and `Event` out (serde types). Any UI host binds to this API, in process or over the named pipe. The UI choice does not change the core.
-- No tokio and no polling loops. Time is one deadline at a time, armed with a coalescable waitable timer so Windows can batch the wake-up.
+- One thread runs the Win32 message loop. All OS signals arrive as messages to one hidden top-level window (a message-only window does not get `WM_POWERBROADCAST`). The core runs on that same thread, so there are no locks.
+- The core takes method calls with the time and returns `Event` values (ADR 0002, "How modules talk"). The UI choice does not change the core.
+- No tokio and no polling loops. Time is one deadline at a time, armed with one coalescable one-shot timer (`SetCoalescableTimer`) so Windows can batch the wake-up.
 
 ### Removing the polling
 

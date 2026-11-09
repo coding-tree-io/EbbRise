@@ -29,8 +29,8 @@ Regressions from the CHANGELOG:
 - With `pauseForSuspendOrLock` off, resume keeps the remaining time instead of restarting (`correctScheduler`).
 
 Rules the port changes (upstream polls every 2 s; the port reacts to events):
-- Idle: given the same input timeline, the event-driven idle check gives the same reset/resume outcome as the 2 s poll, at most one poll interval later.
-- DND and app exclusions: a state change arriving as an event gives the same outcome as the poll seeing it.
+- Idle: the event-driven idle check gives the same reset/resume outcome as the 2 s poll, at most one poll interval later (app simulation test).
+- DND and app exclusions: an event calls the same planner method the poll would, only earlier, so the planner tests cover both.
 - Sleep: a deadline that passes during sleep fires once on resume, not twice and not never.
 
 ## Tier B: pure rules worth keeping (port, trimmed, table-driven)

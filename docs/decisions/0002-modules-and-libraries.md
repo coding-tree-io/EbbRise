@@ -26,7 +26,7 @@ Rust has no Spring-style application framework, and the port does not need one. 
 | `commands` | CLI grammar, duration parser, pipe message format | — |
 | `i18n` (later) | Locale files, time-remaining text | — |
 | `ideas` (later) | Break ideas, sanitising | — |
-| `platform` (later) | Windows adapters, one internal module per OS signal | no domain crate |
+| `platform` | Windows adapters, one internal module per OS signal | no domain crate |
 | `ui` (later) | Slint UI host | domain crates, not `platform` |
 | `app` | Composition root: message loop, wiring, logging | all |
 
@@ -69,6 +69,6 @@ Rejected: tokio and actix (a runtime and extra wake-ups for no gain), Bevy app/p
 
 ## One thread, one loop
 
-Slint, `tray-icon` and `global-hotkey` all need the Win32 message loop on the main thread, and they can share it. `slint::run_event_loop_until_quit` keeps the loop alive with no window open. Backend timers use `SetCoalescableTimer` on a message-only window, pumped by the same loop. Use the crates' `set_event_handler` callbacks, not their channel receivers, which need polling.
+Slint, `tray-icon` and `global-hotkey` all need the Win32 message loop on the main thread, and they can share it. `slint::run_event_loop_until_quit` keeps the loop alive with no window open. Backend timers use `SetCoalescableTimer` on one hidden top-level window (only top-level windows get `WM_POWERBROADCAST`), pumped by the same loop. Use the crates' `set_event_handler` callbacks, not their channel receivers, which need polling.
 
-Probe 2026-11-09 (`crates/probe`): confirmed. With Slint's loop running and no window open, the tray icon, global hotkeys, a 10 s coalescable timer (ticks within ±10 ms), session and suspend registration, `GetLastInputInfo` and the Focus Assist WNF callback all worked on the one thread. Not yet tested: lock/unlock and sleep/wake delivery.
+Probe 2026-11-09 (`crates/probe`, commit `8515d44`; removed once `platform` replaced it): confirmed. With Slint's loop running and no window open, the tray icon, global hotkeys, a 10 s coalescable timer (ticks within ±10 ms), session and suspend registration, `GetLastInputInfo` and the Focus Assist WNF callback all worked on the one thread. Not yet tested: lock/unlock and sleep/wake delivery.

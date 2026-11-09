@@ -1,4 +1,6 @@
-use breaks::{until_morning, MorningHour};
+//! Pure rules: until morning, postpone and skip, exclusions, file names, tray icon, text, displays, locales.
+
+use breaks::{MorningHour, until_morning};
 
 #[test]
 fn until_morning_fixed_hour_sunrise_and_dst() {
@@ -32,14 +34,8 @@ fn postpone_and_skip_actions() {
         (true, false, 40.0, false, false),
         (false, false, 20.0, false, true),
     ] {
-        assert_eq!(
-            breaks::can_postpone(postpone, passed, 30.0),
-            can_postpone
-        );
-        assert_eq!(
-            breaks::can_skip(strict, postpone, passed, 30.0),
-            can_skip
-        );
+        assert_eq!(breaks::can_postpone(postpone, passed, 30.0), can_postpone);
+        assert_eq!(breaks::can_skip(strict, postpone, passed, 30.0), can_skip);
     }
 }
 
@@ -52,6 +48,7 @@ fn process_name_matching_for_exclusion_rules() {
         ("resume", vec!["meeting"], false),
         ("resume", vec!["game"], true),
     ] {
+        let commands: Vec<String> = commands.into_iter().map(Into::into).collect();
         assert_eq!(
             breaks::exclusion_blocks(rule, &commands, &processes),
             expected
@@ -100,7 +97,7 @@ fn time_remaining_text() {
 
 #[test]
 fn target_display_and_centered_placement() {
-    use breaks::{target_display, window_position, Display, Rect};
+    use breaks::{Display, Rect, target_display, window_position};
     let displays = [
         Display {
             id: 1,
@@ -121,6 +118,11 @@ fn target_display_and_centered_placement() {
             },
         },
     ];
+    let settings = |screen: &str| breaks::Settings {
+        all_screens: false,
+        screen: screen.into(),
+        ..breaks::Settings::default()
+    };
     for (setting, index, expected) in [
         ("primary", -1, 1),
         ("cursor", -1, 2),
@@ -128,7 +130,7 @@ fn target_display_and_centered_placement() {
         ("9", -1, 2),
     ] {
         assert_eq!(
-            target_display(&displays, 1, 2, false, setting, index)
+            target_display(&displays, 1, 2, &settings(setting), index)
                 .unwrap()
                 .id,
             expected

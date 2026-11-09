@@ -20,7 +20,7 @@ Source read: `app/main.js` (1,942 lines), `app/breaksPlanner.js`, `app/utils/*.j
 | Manual finish phase | waits for user after time ends | Same | |
 | Resume after sleep | `correctScheduler()` re-arms with remaining time | Same contract, explicit wall/monotonic choice | See ADR risk R3. |
 
-Event guards repeat in breaksPlanner: idle/DND/exclusion signals are ignored while paused or during a running break. The port keeps these guards as one table, not copied `if` chains.
+Event guards repeat in breaksPlanner: idle/DND/exclusion signals are ignored while paused or during a running break. The port keeps the same guards; `in_break()` names the repeated "during a running break" check.
 
 ## 2. Inputs from the OS
 

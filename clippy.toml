@@ -1,0 +1,15 @@
+# Limits for the workspace lints in Cargo.toml. Fix code that breaks a limit; do not raise it.
+
+# Clippy default is 25. 15 is the common SonarQube/Clippy-community value; the planner's
+# guard-heavy methods stay under it when they share helpers such as `in_break()`.
+cognitive-complexity-threshold = 15
+
+# Clippy default is 100. 60 lines fit on one screen.
+too-many-lines-threshold = 60
+
+# Clippy default is 7. More than 5 inputs usually means a settings struct or a value type
+# should be passed instead (as `target_display` takes `&Settings`).
+too-many-arguments-threshold = 5
+
+# Off by default. 4 levels counts impl, fn and two control blocks; deeper code gets a helper.
+excessive-nesting-threshold = 4

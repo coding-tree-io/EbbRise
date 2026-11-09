@@ -1,13 +1,23 @@
+/// A parsed command line; options that the command does not take are ignored, as upstream.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Command {
+    /// Command name, such as `pause` or `mini`; `help` when none is given.
     pub name: String,
+    /// `-T`/`--title` of `mini` and `long`.
     pub title: Option<String>,
+    /// `-t`/`--text` of `long`.
     pub text: Option<String>,
+    /// `-n`/`--noskip` of `mini` and `long`: set the next break instead of starting it.
     pub no_skip: bool,
+    /// `-w`/`--wait` of `mini` and `long`, unparsed; see [`Command::wait_duration`].
     pub wait: Option<String>,
+    /// `-d`/`--duration` of `pause`, unparsed; see [`Command::pause_duration`].
     pub duration: Option<String>,
 }
 
+/// Parses `HHhMMm`, `HHh`, `MMm` or `MM` (minutes) into milliseconds.
+///
+/// `"1h20m"` gives 4 800 000. Returns `None` for any other text and for zero.
 pub fn parse_duration(input: &str) -> Option<i64> {
     let input = input.to_ascii_lowercase();
     let number = |s: &str| -> Option<i64> {
@@ -34,6 +44,9 @@ pub fn parse_duration(input: &str) -> Option<i64> {
 }
 
 impl Command {
+    /// Pause length in ms for `pause`: 1 means indefinitely (Stretchly's value).
+    ///
+    /// `until_morning` is used for `-d until-morning`. Returns `None` for an invalid duration.
     pub fn pause_duration(&self, until_morning: i64) -> Option<i64> {
         match self.duration.as_deref() {
             None | Some("") | Some("indefinitely") => Some(1),
@@ -42,6 +55,7 @@ impl Command {
         }
     }
 
+    /// Delay in ms before `mini` or `long` starts; 0 when not given, `None` when invalid.
     pub fn wait_duration(&self) -> Option<i64> {
         match self.wait.as_deref() {
             None | Some("") => Some(0),
@@ -49,6 +63,9 @@ impl Command {
         }
     }
 
+    /// Parses arguments without the program name; leading `--flags` (such as Electron's) are skipped.
+    ///
+    /// Returns `None` for an unknown command.
     pub fn parse(input: &[&str]) -> Option<Self> {
         let args = input
             .iter()

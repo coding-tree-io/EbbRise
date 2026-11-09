@@ -1,3 +1,5 @@
+//! Command-line grammar and duration format.
+
 #[test]
 fn command_grammar_and_duration_table() {
     for (input, expected) in [
@@ -27,9 +29,7 @@ fn command_grammar_and_duration_table() {
         (vec!["pause", "-d", "invalid"], None),
     ] {
         assert_eq!(
-            commands::Command::parse(&args)
-                .unwrap()
-                .pause_duration(500),
+            commands::Command::parse(&args).unwrap().pause_duration(500),
             expected
         );
     }
