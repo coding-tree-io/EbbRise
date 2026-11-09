@@ -79,9 +79,9 @@ Versions are pinned at scaffold time through Context7 / crates.io, not here.
 
 | ID | Risk | Mitigation |
 | --- | --- | --- |
-| R1 | Focus Assist/DND state uses an undocumented WNF name; Windows 11 changed DND UI. | Probe on this machine first; keep the documented `SHQueryUserNotificationState` fallback. |
-| R2 | Toasts from an unpackaged exe need a registered AppUserModelID (Start-menu shortcut or registry). | Register at install time; packaging decision affects this. |
-| R3 | Sleep and timers: upstream re-arms with remaining time on resume. Rust `Instant` and waitable timers may count or skip sleep time differently. | Decide the rule (wall-clock deadline vs active time) explicitly, then test it with a real sleep/resume probe. |
+| R1 | Focus Assist/DND state uses an undocumented WNF name; Windows 11 changed DND UI. | Probe 2026-11-09 (Windows 11 build 26300): the WNF subscription pushed `2` when DND turned on and `0` when it turned off. Keep the documented `SHQueryUserNotificationState` fallback. |
+| R2 | Toasts from an unpackaged exe need a registered AppUserModelID (Start-menu shortcut or registry). | Probe: an `HKCU\Software\Classes\AppUserModelId\<id>` entry with `DisplayName` was enough; toasts appeared. The first toast after registration did not show. One `show()` call blocked the thread for 4 s, so toasts must be sent off the loop thread. |
+| R3 | Sleep and timers: upstream re-arms with remaining time on resume. Rust `Instant` and waitable timers may count or skip sleep time differently. | Probe: tick count includes sleep, `QueryUnbiasedInterruptTime` excludes it (they differed by the machine's total sleep time). Timer behaviour across a real sleep is not tested yet. |
 | R4 | Bundled WAV and image licences are not stated upstream. | Confirm with upstream or replace assets. |
 | R5 | Contributor sync depends on Stretchly's server. | Out of scope unless chosen. |
 

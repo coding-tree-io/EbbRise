@@ -71,4 +71,4 @@ Rejected: tokio and actix (a runtime and extra wake-ups for no gain), Bevy app/p
 
 Slint, `tray-icon` and `global-hotkey` all need the Win32 message loop on the main thread, and they can share it. `slint::run_event_loop_until_quit` keeps the loop alive with no window open. Backend timers use `SetCoalescableTimer` on a message-only window, pumped by the same loop. Use the crates' `set_event_handler` callbacks, not their channel receivers, which need polling.
 
-Not yet proven: a small probe must confirm the shared loop before adapter code is trusted.
+Probe 2026-11-09 (`crates/probe`): confirmed. With Slint's loop running and no window open, the tray icon, global hotkeys, a 10 s coalescable timer (ticks within ±10 ms), session and suspend registration, `GetLastInputInfo` and the Focus Assist WNF callback all worked on the one thread. Not yet tested: lock/unlock and sleep/wake delivery.
