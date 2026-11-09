@@ -278,7 +278,7 @@ export component Segmented inherits Rectangle {
             accessible-checked: self.chosen;
             accessible-action-default => { root.choose(index == 1); }
             border-radius: self.height / 2;
-            background: self.chosen ? Palette.accent : transparent;
+            background: self.chosen ? Palette.accent : (hit.has-hover ? Palette.button-hover : transparent);
             HorizontalLayout {
                 padding-left: 14px;
                 padding-right: 14px;
@@ -289,7 +289,7 @@ export component Segmented inherits Rectangle {
                     color: cell.chosen ? Palette.on-accent : Palette.text;
                 }
             }
-            TouchArea {
+            hit := TouchArea {
                 mouse-cursor: pointer;
                 clicked => { root.choose(index == 1); }
             }
@@ -404,6 +404,11 @@ export component Dropdown inherits Rectangle {
             clip: true;
             Flickable {
                 content-height: root.model.length * 34px + 8px;
+                // Open with the current item in the middle of the list, where the list allows.
+                init => {
+                    self.viewport-y = -max(0px, min(4px + root.current * 34px - (popup.height - 34px) / 2,
+                        root.model.length * 34px + 8px - popup.height));
+                }
                 VerticalLayout {
                     padding: 4px;
                     for item[index] in root.model: Rectangle {

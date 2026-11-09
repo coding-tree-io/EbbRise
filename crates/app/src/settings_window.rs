@@ -47,6 +47,7 @@ impl App {
             )
         });
         window.on_open_website(|| open(Some(Path::new(WEBSITE))));
+        window.on_dark_mode_changed(colour_title_bar);
         window.on_restore_defaults(|| with_app(|app| app.change_settings(Settings::default())));
         window.window().on_close_requested(|| {
             with_app(App::close_settings);

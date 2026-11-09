@@ -172,6 +172,9 @@ export component SettingsWindow inherits Window {
     callback open-logs();
     callback open-website();
     callback restore-defaults();
+    // The title bar must follow a Windows theme switch while the window is open.
+    callback dark-mode-changed(bool);
+    changed dark-mode => { root.dark-mode-changed(self.dark-mode); }
 
     title: "Ebb settings";
     icon: @image-url("icons/ebb.svg");
