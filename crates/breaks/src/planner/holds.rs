@@ -31,12 +31,23 @@ impl BreaksPlanner {
 
     /// Applies the time since the last input, in ms (natural breaks).
     ///
-    /// Idle past `natural_breaks_inactivity_reset_time` holds breaks; input again restarts the cycle.
-    pub fn idle(&mut self, now: i64, idle_time: i64) {
-        if !self.settings.natural_breaks {
-            return;
+    /// Idle past `natural_breaks_inactivity_reset_time` holds breaks; input again restarts the
+    /// cycle. Returns the `*TakenNaturally` events when the user leaves. Off while only active
+    /// time counts, which has its own natural breaks ([`Self::activity`]).
+    pub fn idle(&mut self, now: i64, idle_time: i64) -> Vec<Event> {
+        let s = &self.settings;
+        if !s.natural_breaks || s.count_active_time_only {
+            return Vec::new();
         }
-        if idle_time > self.settings.natural_breaks_inactivity_reset_time {
+        let mut taken = Vec::new();
+        if idle_time > s.natural_breaks_inactivity_reset_time {
+            let waiting = !self.away && !self.paused && !self.in_break() && self.deadline.is_some();
+            if waiting && s.mini_break {
+                taken.push(Event::MiniBreakTakenNaturally);
+            }
+            if waiting && s.long_break && self.long_due.is_some() {
+                taken.push(Event::LongBreakTakenNaturally);
+            }
             self.away = true;
             if !self.paused && !self.in_break() {
                 self.deadline = None;
@@ -47,6 +58,7 @@ impl BreaksPlanner {
                 self.reset(now);
             }
         }
+        taken
     }
 
     /// Applies the running process names to the first active app exclusion rule.

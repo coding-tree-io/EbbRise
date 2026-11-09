@@ -1,5 +1,6 @@
 use crate::{Settings, can_postpone};
 
+mod active_time;
 mod break_time;
 mod holds;
 mod settings_change;
@@ -32,6 +33,10 @@ pub enum Event {
     AwaitLongBreakFinish,
     /// A timed pause ended and breaks restarted.
     ResumeBreaks,
+    /// Idle time replaced the next Mini break (natural break); never a pending step.
+    MiniBreakTakenNaturally,
+    /// Idle time replaced the next Long break (natural break); never a pending step.
+    LongBreakTakenNaturally,
 }
 
 /// Stretchly's break schedule as a sans-IO state machine (upstream `breaksPlanner.js`).
@@ -60,6 +65,12 @@ pub struct BreaksPlanner {
     exclusion: bool,
     suspended: bool,
     next: Event,
+    /// When the current wait for a break started.
+    wait_start: i64,
+    /// Start of the user's idle time while only active time counts.
+    idle_since: Option<i64>,
+    /// The wait is held from this time: the user is idle while only active time counts.
+    held_since: Option<i64>,
 }
 
 impl BreaksPlanner {
@@ -80,6 +91,9 @@ impl BreaksPlanner {
             exclusion: false,
             suspended: false,
             next: Event::StartMiniBreak,
+            wait_start: now,
+            idle_since: None,
+            held_since: None,
         };
         planner.plan_next(now);
         planner
@@ -93,7 +107,7 @@ impl BreaksPlanner {
     /// When the pending step is due; `None` when nothing is scheduled (held, paused
     /// indefinitely, both break types off, or waiting for a manual finish).
     pub fn deadline(&self) -> Option<i64> {
-        self.deadline
+        self.deadline.filter(|_| self.held_since.is_none())
     }
 
     /// Breaks are paused by the user or by suspend/lock.
@@ -124,6 +138,7 @@ impl BreaksPlanner {
     /// Time until the next Long break is due on its own clock; `None` when Long breaks are
     /// off or no cycle runs.
     pub fn time_to_long_break(&self, now: i64) -> Option<i64> {
+        let now = self.held_since.unwrap_or(now);
         self.settings
             .long_break
             .then_some(self.long_due?)
@@ -192,6 +207,8 @@ impl BreaksPlanner {
 
     fn skip_to(&mut self, start: Event, now: i64, delay: Option<i64>) {
         let delay = delay.unwrap_or(SKIP_DELAY_MS);
+        // A break the user asks for comes even while they are idle.
+        self.held_since = None;
         self.next = start;
         self.deadline = Some(now + delay);
         self.delay = delay;
@@ -200,6 +217,7 @@ impl BreaksPlanner {
     /// Pauses breaks for `duration` ms, or until [`Self::resume`] with [`Self::INDEFINITELY`].
     pub fn pause(&mut self, now: i64, duration: i64) {
         self.paused = true;
+        self.held_since = None;
         self.long_due = None;
         self.postpones = 0;
         self.next = Event::ResumeBreaks;
@@ -233,6 +251,7 @@ impl BreaksPlanner {
     /// Time until the next break starts, including any warning before it; `None` when no
     /// break is scheduled or one is running.
     pub fn time_to_next_break(&self, now: i64) -> Option<i64> {
+        let now = self.held_since.unwrap_or(now);
         let remaining = self.deadline? - now;
         match self.next {
             Event::StartMiniBreak | Event::StartLongBreak => Some(remaining),
@@ -276,6 +295,8 @@ impl BreaksPlanner {
     // a Long break.
     fn plan_next(&mut self, now: i64) {
         self.postpones = 0;
+        self.held_since = None;
+        self.wait_start = now;
         if self.next == Event::FinishLongBreak {
             self.long_due = None;
         }
@@ -303,11 +324,12 @@ impl BreaksPlanner {
         if self.dnd || self.exclusion || self.away {
             self.deadline = None;
         }
+        self.hold_if_idle(now);
     }
 
     /// Takes the pending step if it is due at `now` and returns it; empty when nothing is due.
     pub fn advance(&mut self, now: i64) -> Vec<Event> {
-        if !self.deadline.is_some_and(|deadline| now >= deadline) {
+        if !self.deadline().is_some_and(|deadline| now >= deadline) {
             return Vec::new();
         }
         let event = self.next.clone();
@@ -338,7 +360,10 @@ impl BreaksPlanner {
             ),
             Event::StartMiniBreak => (self.settings.mini_break_duration, Event::FinishMiniBreak),
             Event::StartLongBreak => (self.settings.long_break_duration, Event::FinishLongBreak),
-            Event::AwaitMiniBreakFinish | Event::AwaitLongBreakFinish => unreachable!(),
+            Event::AwaitMiniBreakFinish
+            | Event::AwaitLongBreakFinish
+            | Event::MiniBreakTakenNaturally
+            | Event::LongBreakTakenNaturally => unreachable!("never a pending step"),
         };
         self.delay = delay;
         self.deadline = Some(now + delay);

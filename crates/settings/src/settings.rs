@@ -216,6 +216,17 @@ pub struct Settings {
     pub open_at_login: bool,
     /// Linux only; kept for config compatibility.
     pub force_x11_on_wayland: bool,
+    /// The wait for a break advances only while the user is active (not in Stretchly).
+    pub count_active_time_only: bool,
+    /// Remind the user when their active time today reaches [`Settings::daily_limit_time`]
+    /// (not in Stretchly).
+    pub daily_limit: bool,
+    /// Active time per day before the daily-limit reminder, ms.
+    pub daily_limit_time: i64,
+    /// Active time after a postponed daily-limit reminder before it comes again, ms.
+    pub daily_limit_postpone_time: i64,
+    /// During a break, keyboard and mouse input reaches only the break window (not in Stretchly).
+    pub block_input_during_breaks: bool,
     /// Upstream one-time autostart migration is done.
     #[serde(rename = "_migratedOpenAtLogin")]
     pub migrated_open_at_login: bool,

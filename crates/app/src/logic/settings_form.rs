@@ -21,6 +21,16 @@ pub struct BreakForm {
     pub strict: bool,
 }
 
+/// The controls for the features from Workrave (`docs/workrave-features.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UsageForm {
+    pub active_time_only: bool,
+    pub block_input: bool,
+    pub daily_limit: bool,
+    /// Hours of active time per day.
+    pub daily_limit_hours: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettingsForm {
     pub fullscreen: bool,
@@ -34,6 +44,7 @@ pub struct SettingsForm {
     pub theme: usize,
     pub mini: BreakForm,
     pub long: BreakForm,
+    pub usage: UsageForm,
     /// Sound names; the first is [`SILENCE`].
     pub sounds: Vec<String>,
     /// Indexes into `sounds`: Mini start, Mini end, Long start, Long end.
@@ -42,6 +53,7 @@ pub struct SettingsForm {
 }
 
 const MINUTE: i64 = 60_000;
+const HOUR: i64 = 3_600_000;
 /// Stretchly's `themeSource` values, in the order of the window's theme switch.
 const THEMES: [&str; 3] = ["system", "light", "dark"];
 
@@ -92,6 +104,12 @@ impl SettingsForm {
                 notify: s.long_break_notification,
                 strict: s.long_break_strict_mode,
             },
+            usage: UsageForm {
+                active_time_only: s.count_active_time_only,
+                block_input: s.block_input_during_breaks,
+                daily_limit: s.daily_limit,
+                daily_limit_hours: (s.daily_limit_time / HOUR).max(1),
+            },
             sounds,
             sound_choice,
             volume: (s.volume * 100.0).round() as i64,
@@ -134,6 +152,12 @@ impl SettingsForm {
         }
         if self.theme != before.theme {
             s.theme_source = THEMES[self.theme.min(THEMES.len() - 1)].to_owned();
+        }
+        s.count_active_time_only = self.usage.active_time_only;
+        s.block_input_during_breaks = self.usage.block_input;
+        s.daily_limit = self.usage.daily_limit;
+        if self.usage.daily_limit_hours != before.usage.daily_limit_hours {
+            s.daily_limit_time = self.usage.daily_limit_hours * HOUR;
         }
         apply_mini(&self.mini, &before.mini, &mut s);
         apply_long(&self.long, &before.long, &mut s);

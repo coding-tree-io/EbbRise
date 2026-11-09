@@ -558,5 +558,10 @@
   "breakHealthMode": false,
   "openAtLogin": false,
   "forceX11OnWayland": false,
-  "_migratedOpenAtLogin": false
+  "_migratedOpenAtLogin": false,
+  "countActiveTimeOnly": false,
+  "dailyLimit": false,
+  "dailyLimitTime": 14400000,
+  "dailyLimitPostponeTime": 1200000,
+  "blockInputDuringBreaks": false
 }

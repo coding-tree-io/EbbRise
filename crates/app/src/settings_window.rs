@@ -9,13 +9,13 @@ use settings::Settings;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 use tracing::{info, warn};
 
-use crate::logic::{BreakForm, SettingsForm};
+use crate::logic::{BreakForm, SettingsForm, UsageForm};
 use crate::ui::{Palette, SettingsWindow};
 use crate::{App, app_folder, log_path, sync_autostart, with_app};
 
 const TITLE: &str = "EbbRise settings";
 /// The window's ground colour in dark and light mode, for its title bar.
-const GROUND: [u32; 2] = [0x16130E, 0xFAF6EE];
+pub(crate) const GROUND: [u32; 2] = [0x16130E, 0xFAF6EE];
 
 impl App {
     /// Opens the settings window, or brings the open one to the front.
@@ -168,6 +168,10 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
     window.set_long_length(form.long.length as i32);
     window.set_long_notify(form.long.notify);
     window.set_long_strict(form.long.strict);
+    window.set_active_time_only(form.usage.active_time_only);
+    window.set_block_input(form.usage.block_input);
+    window.set_daily_limit(form.usage.daily_limit);
+    window.set_daily_limit_hours(form.usage.daily_limit_hours as i32);
     let labels: Vec<SharedString> = form
         .sounds
         .iter()
@@ -207,6 +211,12 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>) -> SettingsForm {
             length: i64::from(window.get_long_length()),
             notify: window.get_long_notify(),
             strict: window.get_long_strict(),
+        },
+        usage: UsageForm {
+            active_time_only: window.get_active_time_only(),
+            block_input: window.get_block_input(),
+            daily_limit: window.get_daily_limit(),
+            daily_limit_hours: i64::from(window.get_daily_limit_hours()),
         },
         sound_choice: [
             window.get_mini_start(),

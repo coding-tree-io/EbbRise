@@ -1,0 +1,151 @@
+// Statistics window, concept D4-A: one day at a time, with arrows between days
+// (docs/workrave-features.md, feature 3).
+
+import { Palette, RoundButton } from "widgets.slint";
+import { SectionLabel, Card } from "settings_window.slint";
+
+component Summary inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    background: Palette.card;
+    border-width: 1px;
+    border-color: Palette.divider;
+    border-radius: 12px;
+    horizontal-stretch: 1;
+    VerticalLayout {
+        padding: 14px;
+        padding-left: 18px;
+        spacing: 2px;
+        Text {
+            text: root.label;
+            font-size: 12px;
+            color: Palette.text-secondary;
+        }
+        Text {
+            text: root.value;
+            font-size: 22px;
+            font-weight: 600;
+            color: Palette.text;
+        }
+    }
+}
+
+// The five counts of one break kind, in columns.
+component Counts inherits Card {
+    in property <[int]> values;
+    HorizontalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        for name[i] in ["Shown", "Completed", "Natural", "Skipped", "Postponed"]: VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 4px;
+            accessible-role: text;
+            accessible-label: name + ": " + root.values[i];
+            Text {
+                text: name;
+                font-size: 12px;
+                horizontal-alignment: center;
+                color: Palette.text-secondary;
+            }
+            Text {
+                text: root.values[i];
+                font-size: 18px;
+                horizontal-alignment: center;
+                color: Palette.text;
+            }
+        }
+    }
+}
+
+export component StatisticsWindow inherits Window {
+    // For the title bar, which Windows draws.
+    out property <bool> dark-mode: Palette.dark;
+    in property <string> day;
+    in property <bool> can-go-back;
+    in property <bool> can-go-forward;
+    in property <string> active-time;
+    in property <string> completed;
+    in property <[int]> mini;
+    in property <[int]> long;
+    // Empty when no daily-limit reminder came that day.
+    in property <string> daily-limit;
+    callback back();
+    callback forward();
+    callback dark-mode-changed(bool);
+    changed dark-mode => { root.dark-mode-changed(self.dark-mode); }
+
+    title: "EbbRise statistics";
+    icon: @image-url("icons/ebbrise.svg");
+    preferred-width: 600px;
+    min-width: 520px;
+    min-height: 470px;
+    background: Palette.ground;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+
+    VerticalLayout {
+        padding: 28px;
+        padding-left: 36px;
+        padding-right: 36px;
+        spacing: 6px;
+        alignment: start;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Statistics";
+                font-size: 28px;
+                font-weight: 600;
+                color: Palette.text;
+                horizontal-stretch: 1;
+            }
+            VerticalLayout {
+                alignment: center;
+                RoundButton {
+                    label: "Previous day";
+                    icon: "M 15 6 L 9 12 L 15 18";
+                    enabled: root.can-go-back;
+                    clicked => { root.back(); }
+                }
+            }
+            Text {
+                text: root.day;
+                min-width: 120px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                color: Palette.text;
+            }
+            VerticalLayout {
+                alignment: center;
+                RoundButton {
+                    label: "Next day";
+                    icon: "M 9 6 L 15 12 L 9 18";
+                    enabled: root.can-go-forward;
+                    clicked => { root.forward(); }
+                }
+            }
+        }
+        Rectangle { height: 10px; }
+        HorizontalLayout {
+            spacing: 12px;
+            Summary {
+                label: "Active time";
+                value: root.active-time;
+            }
+            Summary {
+                label: "Breaks completed";
+                value: root.completed;
+            }
+        }
+        Rectangle { height: 8px; }
+        SectionLabel { text: "MINI BREAKS"; }
+        Counts { values: root.mini; }
+        Rectangle { height: 8px; }
+        SectionLabel { text: "LONG BREAKS"; }
+        Counts { values: root.long; }
+        if root.daily-limit != "": Text {
+            text: root.daily-limit;
+            wrap: word-wrap;
+            color: Palette.text-secondary;
+        }
+    }
+}

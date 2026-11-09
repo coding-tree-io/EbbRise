@@ -20,6 +20,8 @@ On the first start, EbbRise imports your Stretchly settings if Stretchly is inst
 - Breaks in a window or full screen, with a countdown ring and an evidence-based idea.
 - Natural breaks: time away from the PC counts as a break. Breaks wait during Do Not Disturb.
 - Settings window in light, dark or the Windows theme. The tray, the notifications and most of Settings use Stretchly's translations (54 languages).
+- From [Workrave](https://workrave.org), as opt-in settings on the Activity page: count only active time (time away from the PC holds the wait for a break), and a daily limit on PC use. Also opt-in: block keyboard and mouse input to other apps during breaks. Strict mode is a separate setting: it removes Skip and Postpone.
+- Statistics for each day: breaks shown, completed, taken naturally, skipped and postponed, and active time. Open them from the tray menu or with `ebbrise statistics`.
 - Three built-in sounds; put your own WAV files in `%APPDATA%\EbbRise\audio`.
 - Stretchly's command line, for example `ebbrise pause -d 1h` or `ebbrise mini`. Run `ebbrise help` for the full list.
 
@@ -35,6 +37,7 @@ The exe is `target/release/ebbrise.exe`. Checks: `cargo fmt --check`, `cargo cli
 
 - [Backend inventory](docs/backend-inventory.md): every backend behaviour and OS integration, with the Windows mechanism for each.
 - [ADR 0001: technology stack](docs/decisions/0001-technology-stack.md) and [ADR 0002: modules and libraries](docs/decisions/0002-modules-and-libraries.md).
+- [Workrave features](docs/workrave-features.md): the clean-room spec of the features taken from Workrave (GPL-3.0; no code copied).
 - [Test plan](docs/test-port-plan.md) and [project language](docs/language.md).
 
 Not ported: global hotkeys.

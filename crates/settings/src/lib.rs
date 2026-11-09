@@ -5,3 +5,4 @@ mod settings;
 mod store;
 
 pub use settings::{AppExclusion, Idea, MorningHour, PauseDuration, Settings};
+pub use store::write_atomically;

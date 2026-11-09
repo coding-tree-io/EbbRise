@@ -29,6 +29,15 @@ pub(super) fn tray_message(planner: &BreaksPlanner, words: &Translator, now: i64
     let Some(remaining) = planner.time_to_next_break(now) else {
         return String::new();
     };
+    let message = next_breaks(planner, words, now, remaining);
+    if planner.settings().count_active_time_only {
+        // Only active time counts (`docs/workrave-features.md`, feature 1). English only.
+        return format!("{message}\nCounts only active time");
+    }
+    message
+}
+
+fn next_breaks(planner: &BreaksPlanner, words: &Translator, now: i64, remaining: i64) -> String {
     let long = matches!(
         planner.next(),
         Event::StartLongBreak | Event::LongBreakNotification

@@ -1,10 +1,12 @@
 //! Break timing (the planner), pause-until-morning, and the pure rules the UI and tray use.
 //! Platform-free: the caller passes the time in and carries out the returned events.
 
+mod activity;
 mod morning;
 mod planner;
 mod rules;
 
+pub use activity::{Activity, ActivityMonitor, IDLE_AFTER_MS};
 pub use morning::until_morning;
 pub use planner::{BreakTime, BreaksPlanner, Event};
 pub use rules::{

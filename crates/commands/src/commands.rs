@@ -17,6 +17,7 @@ Commands:
 	ebbrise long [options]        Skip to the Long break, customize it
 	ebbrise last                  Start the last Mini or Long break again
 	ebbrise preferences           Open Preferences window
+	ebbrise statistics            Open Statistics window
 
 Options:
 	-T, --title    Specify title for next break (Long or Mini)
@@ -130,6 +131,7 @@ impl Command {
             "long",
             "last",
             "preferences",
+            "statistics",
         ]
         .contains(&name)
         {

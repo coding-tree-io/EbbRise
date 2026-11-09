@@ -8,10 +8,13 @@ mod logic;
 mod settings_window;
 mod settings_words;
 mod sounds;
+mod statistics_store;
+mod statistics_window;
 mod storage;
 mod tray_menu;
 mod ui;
 mod update;
+mod usage_views;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -50,6 +53,16 @@ impl Environment for Windows {
             settings.pos_longitude,
         )
     }
+
+    fn day(&self) -> String {
+        use jiff::ToSpan;
+        // Civil time, so the day still starts at 04:00 on a daylight-saving change.
+        jiff::Zoned::now()
+            .datetime()
+            .checked_sub(4.hours())
+            .map(|time| time.date().to_string())
+            .unwrap_or_default()
+    }
 }
 
 struct App {
@@ -67,6 +80,11 @@ struct App {
     settings_sounds: Vec<String>,
     /// A newer release tag, once the update check found one.
     new_version: Option<String>,
+    /// The daily-limit reminder while it is open.
+    limit_view: Option<BreakView>,
+    statistics_view: Option<statistics_window::StatisticsView>,
+    /// Keeps input away from other apps during a break (`blockInputDuringBreaks`).
+    input_block: Option<platform::InputBlock>,
 }
 
 type AppAction = Box<dyn FnOnce(&mut App)>;
@@ -109,7 +127,10 @@ fn main() {
     }
     let signals =
         SignalWindow::new(|signal| with_app(|app| app.on_signal(signal))).expect("signal window");
-    let core = Core::new(settings, awake_ms(), signals.focus_assist);
+    let mut core = Core::new(settings, awake_ms(), signals.focus_assist);
+    if let Some(today) = usage_views::saved_today(&Windows) {
+        core.restore_statistics(today);
+    }
 
     let tray = TrayIconBuilder::new()
         .with_tooltip(core.words().text("main.toolTipHeader"))
@@ -138,6 +159,9 @@ fn main() {
             settings_window: None,
             settings_sounds: Vec::new(),
             new_version: None,
+            limit_view: None,
+            statistics_view: None,
+            input_block: None,
         });
     });
     with_app(App::rearm_timer_and_refresh_tray);
@@ -153,8 +177,12 @@ impl App {
         if signal != Signal::Timer {
             info!(?signal, "signal");
         }
+        if signal == Signal::Lock {
+            self.input_block = None;
+        }
         let effects = self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows);
         self.carry_out(effects);
+        self.save_statistics();
         self.rearm_timer_and_refresh_tray();
     }
 
@@ -162,6 +190,7 @@ impl App {
         info!(?button, "break button");
         let effects = self.core.on_break_button(button, awake_ms());
         self.carry_out(effects);
+        self.save_statistics();
         self.rearm_timer_and_refresh_tray();
     }
 
@@ -181,11 +210,15 @@ impl App {
                 Effect::ShowBreak(screen) => self.open_break(screen),
                 Effect::CloseBreak => self.close_break(),
                 Effect::OpenSettings => self.open_settings(),
+                Effect::OpenStatistics => self.open_statistics(),
+                Effect::ShowDailyLimit(limit) => self.open_daily_limit(limit),
+                Effect::CloseDailyLimit => self.close_daily_limit(),
             }
         }
     }
 
     fn close_break(&mut self) {
+        self.input_block = None;
         if let Some(view) = self.break_view.take() {
             view.close();
         }
@@ -199,12 +232,17 @@ impl App {
             Ok(view) => self.break_view = Some(view),
             Err(error) => error!(%error, "break window failed"),
         }
+        self.block_input();
         self.refresh_break();
     }
 
     fn refresh_break(&mut self) {
         if let (Some(view), Some(time)) = (&self.break_view, self.core.break_time(awake_ms())) {
             view.refresh(self.core.words(), &time);
+            if time.awaiting_finish {
+                // The break time is over; the block ends even if the window waits for Finish.
+                self.input_block = None;
+            }
         }
     }
 
@@ -216,8 +254,12 @@ impl App {
         if action == MenuAction::Preferences {
             return self.open_settings();
         }
+        if action == MenuAction::Statistics {
+            return self.open_statistics();
+        }
         if action == MenuAction::Quit {
             if self.core.may_quit() {
+                self.save_today_statistics();
                 return drop(slint::quit_event_loop());
             }
             return info!("quit refused: a strict-mode break runs");

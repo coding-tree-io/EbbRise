@@ -19,6 +19,8 @@ pub enum MenuAction {
     Reset,
     /// Open the settings window.
     Preferences,
+    /// Open the Statistics window.
+    Statistics,
     /// Open the latest release page (upstream's "Download latest version").
     DownloadUpdate,
     Quit,
@@ -38,6 +40,7 @@ impl MenuAction {
             Self::SkipToLong => "skip-long",
             Self::Reset => "reset",
             Self::Preferences => "preferences",
+            Self::Statistics => "statistics",
             Self::DownloadUpdate => "download-update",
             Self::Quit => "quit",
         };
@@ -56,6 +59,7 @@ impl MenuAction {
             Self::SkipToLong,
             Self::Reset,
             Self::Preferences,
+            Self::Statistics,
             Self::DownloadUpdate,
             Self::Quit,
         ]
@@ -132,6 +136,10 @@ pub(super) fn tray_menu(planner: &BreaksPlanner, words: &Translator, now: i64) -
         menu.push(item(MenuAction::Reset, "main.resetBreaks"));
     }
     menu.push(MenuEntry::Separator);
+    menu.push(MenuEntry::Item {
+        label: "Statistics".to_owned(),
+        action: MenuAction::Statistics,
+    });
     menu.push(item(MenuAction::Preferences, "main.preferences"));
     menu.push(item(MenuAction::Quit, "main.quitStretchly"));
     menu
@@ -195,6 +203,7 @@ mod tests {
                 "Pause breaks [30 minutes, 2 hours, Until morning, -, Indefinitely]",
                 "Reset breaks",
                 "-",
+                "Statistics",
                 "Preferences",
                 "Quit EbbRise",
             ]
@@ -207,6 +216,7 @@ mod tests {
                 "-",
                 "Resume breaks",
                 "-",
+                "Statistics",
                 "Preferences",
                 "Quit EbbRise"
             ]
@@ -237,6 +247,7 @@ mod tests {
             MenuAction::SkipToLong,
             MenuAction::Reset,
             MenuAction::Preferences,
+            MenuAction::Statistics,
             MenuAction::Quit,
         ];
         for action in actions {

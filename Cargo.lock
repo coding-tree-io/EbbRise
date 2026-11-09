@@ -224,6 +224,7 @@ dependencies = [
  "jiff",
  "platform",
  "resvg",
+ "serde",
  "serde_json",
  "settings",
  "slint",

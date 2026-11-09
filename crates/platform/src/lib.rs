@@ -1,11 +1,12 @@
 //! Windows adapters: signal window and timer, clocks, Focus Assist, running processes, toasts,
-//! sounds, autostart, single instance and one HTTPS GET.
+//! sounds, autostart, single instance, the input block during breaks and one HTTPS GET.
 //! Each turns an OS feature into plain values; no domain types here (ADR 0002).
 
 mod autostart;
 mod clock;
 mod focus_assist;
 mod http;
+mod input_block;
 mod instance;
 mod processes;
 mod screen;
@@ -17,6 +18,7 @@ pub mod toast;
 pub use autostart::{autostart_command, set_autostart};
 pub use clock::{awake_ms, idle_ms};
 pub use http::https_get;
+pub use input_block::InputBlock;
 pub use instance::{attach_parent_console, is_first_instance};
 pub use processes::running_process_names;
 pub use screen::{primary_screen_size, small_icon_size};

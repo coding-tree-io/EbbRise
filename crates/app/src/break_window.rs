@@ -62,6 +62,25 @@ impl BreakView {
         self.window.set_show_finish(time.awaiting_finish);
     }
 
+    /// Shows a still ring with `number` and `caption`, and the Postpone and Skip buttons
+    /// (the daily-limit reminder).
+    pub fn show_still(&self, number: &str, caption: &str) {
+        let full = BreakTime {
+            long: false,
+            remaining: 1,
+            length: 1,
+            may_postpone: true,
+            may_skip: true,
+            awaiting_finish: false,
+        };
+        self.window.set_number(number.into());
+        self.window.set_caption(caption.into());
+        self.window.set_ring(ring_commands(&full).into());
+        self.window.set_show_postpone(true);
+        self.window.set_show_skip(true);
+        self.window.set_show_finish(false);
+    }
+
     /// Hides the window now and frees it after the current event, which may be its own button.
     pub fn close(self) {
         if let Err(error) = self.window.hide() {

@@ -49,7 +49,10 @@ fn source_files_stay_within_the_code_line_limit() {
 
 #[test]
 fn domain_dependencies_follow_module_boundaries() {
-    let metadata = cargo_metadata::MetadataCommand::new().exec().unwrap();
+    let metadata = cargo_metadata::MetadataCommand::new()
+        .no_deps()
+        .exec()
+        .unwrap();
     let workspace = metadata.workspace_packages();
     let allowed: &[(&str, &[&str])] = &[
         ("settings", &[]),

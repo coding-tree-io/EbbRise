@@ -29,23 +29,33 @@ impl Settings {
         }
     }
 
-    /// Writes the settings to `path` as JSON and creates its folder when needed.
-    ///
-    /// The JSON goes to a temporary file first, which then replaces `path`. A crash leaves
-    /// the old file or the new one, never half of one.
+    /// Writes the settings to `path` as JSON, atomically ([`write_atomically`]).
     ///
     /// # Errors
     /// When the folder or the file cannot be written.
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(folder) = path.parent() {
-            fs::create_dir_all(folder)?;
-        }
-        let temporary = path.with_extension("json.tmp");
-        {
-            let mut file = fs::File::create(&temporary)?;
-            file.write_all(&serde_json::to_vec_pretty(self)?)?;
-            file.sync_all()?;
-        }
-        fs::rename(&temporary, path)
+        write_atomically(path, &serde_json::to_vec_pretty(self)?)
     }
+}
+
+/// Writes `bytes` to `path` and creates its folder when needed.
+///
+/// The bytes go to a temporary file first, which then replaces `path`. A crash leaves the
+/// old file or the new one, never half of one.
+///
+/// # Errors
+/// When the folder or the file cannot be written.
+pub fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    if let Some(folder) = path.parent() {
+        fs::create_dir_all(folder)?;
+    }
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".tmp");
+    let temporary = std::path::PathBuf::from(temporary);
+    {
+        let mut file = fs::File::create(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+    }
+    fs::rename(&temporary, path)
 }

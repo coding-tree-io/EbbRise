@@ -47,6 +47,9 @@ impl Core {
         if command.name == "preferences" {
             return vec![Effect::OpenSettings];
         }
+        if command.name == "statistics" {
+            return vec![Effect::OpenStatistics];
+        }
         match command.name.as_str() {
             "reset" => self.planner.reset(now),
             "pause" => self.pause_from_command(&command, now, os),

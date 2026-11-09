@@ -24,7 +24,12 @@ impl BreaksPlanner {
     /// break runs or breaks are paused; other changes apply from the next step.
     pub fn set_settings(&mut self, settings: Settings, now: i64) {
         let schedule_changed = schedule(&self.settings) != schedule(&settings);
+        let active_time_off = !settings.count_active_time_only;
         self.settings = settings;
+        if active_time_off {
+            self.idle_since = None;
+            self.release(now, 0);
+        }
         if schedule_changed && !self.in_break() && !self.paused {
             self.reset(now);
         }

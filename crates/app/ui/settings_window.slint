@@ -59,14 +59,14 @@ component NavItem inherits Rectangle {
     }
 }
 
-component SectionLabel inherits Text {
+export component SectionLabel inherits Text {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 1.4px;
     color: Palette.accent;
 }
 
-component Card inherits Rectangle {
+export component Card inherits Rectangle {
     background: Palette.card;
     border-width: 1px;
     border-color: Palette.divider;
@@ -157,6 +157,11 @@ export component SettingsWindow inherits Window {
     in-out property <int> long-length;
     in-out property <bool> long-notify;
     in-out property <bool> long-strict;
+    // Activity (from Workrave: docs/workrave-features.md)
+    in-out property <bool> active-time-only;
+    in-out property <bool> block-input;
+    in-out property <bool> daily-limit;
+    in-out property <int> daily-limit-hours;
     // Sounds
     in property <[string]> sounds;
     in-out property <int> mini-start;
@@ -228,6 +233,12 @@ export component SettingsWindow inherits Window {
                     clicked => { root.page = 1; }
                 }
                 NavItem {
+                    text: "Activity";
+                    icon: "M 3 12 L 7 12 L 10 5 L 14 19 L 17 12 L 21 12";
+                    current: root.page == 4;
+                    clicked => { root.page = 4; }
+                }
+                NavItem {
                     text: Words.sounds;
                     icon: "M 11 5 L 6 9 L 2 9 L 2 15 L 6 15 L 11 19 Z M 15.5 8.5 A 5 5 0 0 1 15.5 15.5";
                     current: root.page == 2;
@@ -272,6 +283,17 @@ export component SettingsWindow inherits Window {
                         Switch {
                             label: Words.show-ideas;
                             checked <=> root.ideas;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Block keyboard and mouse";
+                    hint: "Other apps get no input during breaks";
+                    Centre {
+                        Switch {
+                            label: "Block keyboard and mouse during breaks";
+                            checked <=> root.block-input;
                             toggled => { root.changed(); }
                         }
                     }
@@ -548,6 +570,58 @@ export component SettingsWindow inherits Window {
                             compact: true;
                             clicked => { root.open-audio-folder(); }
                         }
+                    }
+                }
+            }
+        }
+
+        if root.page == 4: VerticalLayout {
+            padding: 28px;
+            padding-left: 36px;
+            padding-right: 36px;
+            spacing: 6px;
+            alignment: start;
+            PageTitle { text: "Activity"; }
+            Rectangle { height: 10px; }
+            SectionLabel { text: "BREAK TIMING"; }
+            Card {
+                Row {
+                    title: "Count only active time";
+                    hint: "Time away from the PC doesn't bring breaks closer";
+                    last: true;
+                    Centre {
+                        Switch {
+                            label: "Count only active time";
+                            checked <=> root.active-time-only;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 8px; }
+            SectionLabel { text: "DAILY LIMIT"; }
+            Card {
+                Row {
+                    title: "Daily limit";
+                    hint: "A reminder after this much PC use in a day";
+                    Centre {
+                        Switch {
+                            label: "Daily limit";
+                            checked <=> root.daily-limit;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "After";
+                    last: true;
+                    Stepper {
+                        label: "hours of use per day";
+                        unit: "h";
+                        minimum: 1;
+                        maximum: 16;
+                        value <=> root.daily-limit-hours;
+                        changed => { root.changed(); }
                     }
                 }
             }

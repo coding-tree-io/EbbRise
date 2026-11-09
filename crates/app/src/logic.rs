@@ -1,11 +1,16 @@
 //! The app's behaviour without Windows: signals and menu choices go in with the time,
 //! toasts and the next wake-up come out. `main.rs` only connects this to the OS.
 
+mod announce;
 mod break_screen;
 mod command;
 mod menu;
 mod settings_form;
+mod statistics;
 mod status;
+mod usage;
+
+use announce::{sound, toast};
 
 use breaks::{BreakTime, BreaksPlanner, Event};
 use fastrand::Rng;
@@ -16,7 +21,9 @@ use settings::Settings;
 
 pub use break_screen::{BreakButton, BreakScreen, countdown, ring_commands};
 pub use menu::{MenuAction, MenuEntry};
-pub use settings_form::{BreakForm, SettingsForm};
+pub use settings_form::{BreakForm, SettingsForm, UsageForm};
+pub use statistics::{BreakCounts, DayStatistics};
+pub use usage::DailyLimitScreen;
 
 /// How often to check for the user's return while they are away (no input event exists for that).
 const AWAY_CHECK_MS: i64 = 2_000;
@@ -42,6 +49,12 @@ pub enum Effect {
     CloseBreak,
     /// Open the settings window (the `preferences` command).
     OpenSettings,
+    /// Open the Statistics window (the `statistics` command).
+    OpenStatistics,
+    /// Open the daily-limit reminder.
+    ShowDailyLimit(DailyLimitScreen),
+    /// Close the daily-limit reminder.
+    CloseDailyLimit,
 }
 
 /// The next timer: fire after `delay` ms; Windows may shift it by `tolerance` ms to batch wake-ups.
@@ -57,6 +70,8 @@ pub trait Environment {
     fn running_processes(&self) -> Option<Vec<String>>;
     /// Milliseconds until the configured morning; `None` when there is no morning time.
     fn until_morning(&self, settings: &Settings) -> Option<i64>;
+    /// Today as `YYYY-MM-DD`, where a day starts at 04:00 local time.
+    fn day(&self) -> String;
 }
 
 /// The kind and words of the last break, for the `last` command.
@@ -74,6 +89,7 @@ pub struct Core {
     /// Words that a `mini` or `long` command set for the next break (upstream `nextIdea`).
     next_idea: Option<command::IdeaOverride>,
     last_break: Option<LastBreak>,
+    usage: usage::Usage,
 }
 
 impl Core {
@@ -81,6 +97,7 @@ impl Core {
     pub fn new(settings: Settings, now: i64, focus_assist: Option<i32>) -> Self {
         let words = Translator::new(&settings.language);
         let ideas = Ideas::load(&settings, Rng::new());
+        let usage = usage::Usage::new(settings.daily_limit_time);
         let mut planner = BreaksPlanner::new(settings, now);
         planner.focus_assist(now, focus_assist.unwrap_or(FOCUS_ASSIST_UNSUPPORTED));
         Self {
@@ -90,6 +107,7 @@ impl Core {
             exclusion_checked_at: now,
             next_idea: None,
             last_break: None,
+            usage,
         }
     }
 
@@ -112,9 +130,13 @@ impl Core {
     ) -> Vec<Effect> {
         match signal {
             Signal::Timer => {
-                self.planner.idle(now, idle);
-                let mut effects = self.check_app_exclusion(now, os);
+                let mut effects = self.track_usage(now, idle, os);
+                for event in self.planner.idle(now, idle) {
+                    effects.extend(self.carry_out(event, true));
+                }
+                effects.extend(self.check_app_exclusion(now, os));
                 effects.extend(self.run_due_steps(now));
+                effects.extend(self.check_daily_limit(now));
                 return effects;
             }
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
@@ -169,6 +191,7 @@ impl Core {
 
     /// `on_time` is false when something other than the break's own time ended it.
     fn carry_out(&mut self, event: Event, on_time: bool) -> Vec<Effect> {
+        self.usage.stats.record(&event, on_time);
         let window = match event {
             Event::StartMiniBreak | Event::StartLongBreak => {
                 let long = event == Event::StartLongBreak;
@@ -203,6 +226,7 @@ impl Core {
             return Vec::new();
         }
         if button == BreakButton::Postpone {
+            self.usage.stats.postponed(time.long);
             self.planner.postpone(now);
             return vec![Effect::CloseBreak];
         }
@@ -253,6 +277,7 @@ impl Core {
             MenuAction::Reset => self.planner.reset(now),
             MenuAction::Resume
             | MenuAction::Preferences
+            | MenuAction::Statistics
             | MenuAction::DownloadUpdate
             | MenuAction::Quit => {}
         }
@@ -263,7 +288,15 @@ impl Core {
         if settings.language != self.settings().language {
             self.words = Translator::new(&settings.language);
         }
+        if settings.daily_limit_time != self.settings().daily_limit_time {
+            self.usage.set_limit(settings.daily_limit_time);
+        }
+        let active_time_on =
+            settings.count_active_time_only && !self.settings().count_active_time_only;
         self.planner.set_settings(settings, now);
+        if active_time_on {
+            self.sync_idle_after_settings(now);
+        }
     }
 
     /// The tray menu for the current state.
@@ -284,7 +317,8 @@ impl Core {
             delay: deadline - now,
             tolerance: 10,
         });
-        let idle_check = settings.natural_breaks.then(|| {
+        let classic_natural_breaks = settings.natural_breaks && !settings.count_active_time_only;
+        let idle_check = classic_natural_breaks.then(|| {
             let delay = if self.planner.away() {
                 AWAY_CHECK_MS
             } else {
@@ -300,7 +334,8 @@ impl Core {
             delay: (due - now).max(0),
             tolerance: 1_000,
         });
-        [break_due, idle_check, exclusion_check]
+        let usage = self.usage_wake(now, idle);
+        [break_due, idle_check, exclusion_check, usage]
             .into_iter()
             .flatten()
             .min_by_key(|wake| (wake.delay, wake.tolerance))
@@ -321,50 +356,6 @@ impl Core {
         };
         (text, self.planner.paused())
     }
-}
-
-/// The start sound when a break starts, and the end sound when it ends on time.
-fn sound(s: &Settings, event: &Event, on_time: bool) -> Option<String> {
-    if s.silent_notifications {
-        return None;
-    }
-    let name = match event {
-        Event::StartMiniBreak => &s.mini_break_start_sound,
-        Event::StartLongBreak => &s.long_break_start_sound,
-        Event::FinishMiniBreak if on_time => &s.mini_break_audio,
-        Event::FinishLongBreak if on_time => &s.long_break_audio,
-        _ => return None,
-    };
-    (name != SILENCE).then(|| name.clone())
-}
-
-/// Upstream shows only the notifications and `resumingBreaks`; breaks get the break window.
-fn toast(words: &Translator, s: &Settings, event: &Event) -> Option<Toast> {
-    let seconds = |interval: i64| (interval / 1000).to_string();
-    let (title, text) = match event {
-        Event::MiniBreakNotification => (
-            words.with(
-                "main.miniBreakIn",
-                &[("seconds", &seconds(s.mini_break_notification_interval))],
-            ),
-            String::new(),
-        ),
-        Event::LongBreakNotification => (
-            words.with(
-                "main.longBreakIn",
-                &[("seconds", &seconds(s.long_break_notification_interval))],
-            ),
-            String::new(),
-        ),
-        Event::ResumeBreaks => (words.text("main.resumingBreaks"), String::new()),
-        Event::StartMiniBreak
-        | Event::StartLongBreak
-        | Event::FinishMiniBreak
-        | Event::FinishLongBreak
-        | Event::AwaitMiniBreakFinish
-        | Event::AwaitLongBreakFinish => return None,
-    };
-    Some(Toast { title, text })
 }
 
 #[cfg(test)]
@@ -415,6 +406,10 @@ mod tests {
 
         fn until_morning(&self, _: &Settings) -> Option<i64> {
             self.morning
+        }
+
+        fn day(&self) -> String {
+            "2026-11-09".to_owned()
         }
     }
 
@@ -481,6 +476,9 @@ mod tests {
                 }
                 Effect::CloseBreak => self.window_open = false,
                 Effect::OpenSettings => self.log.push((self.now, "settings".to_owned())),
+                Effect::OpenStatistics => self.log.push((self.now, "statistics".to_owned())),
+                Effect::ShowDailyLimit(limit) => self.log.push((self.now, limit.screen.kind)),
+                Effect::CloseDailyLimit => self.log.push((self.now, "limit closed".to_owned())),
             }
         }
 
@@ -837,5 +835,65 @@ Next Long break in about 2 minutes"
         assert!(!sim.core.may_quit());
         sim.run_until(41_000);
         assert!(sim.core.may_quit());
+    }
+
+    #[test]
+    fn only_active_time_brings_the_next_break_closer() {
+        let mut sim = Sim::new(r#","countActiveTimeOnly":true,"naturalBreaks":false"#);
+        sim.run_until(5_000);
+        // The user leaves after the input at 5 s and comes back at 105 s.
+        sim.away_since = Some(5_000);
+        sim.run_until(105_000);
+        assert_eq!(sim.take_log(), log(&[]), "nothing while away");
+        sim.away_since = None;
+        sim.run_until(130_000);
+        let log = sim.take_log();
+        let (at, title) = &log[0];
+        assert_eq!(title, "Mini break in 10 seconds");
+        // 10 s of the 20 s wait were used before the idle time (5 s of input plus 5 s until
+        // idle), and the return is seen within one 2 s look plus the 1 s noise check.
+        assert!((115_000..=118_500).contains(at), "{at}");
+    }
+
+    #[test]
+    fn the_daily_limit_reminds_postpones_and_stops_for_the_day() {
+        let limit = r#","miniBreak":false,"longBreak":false,"dailyLimit":true,
+            "dailyLimitTime":60000,"dailyLimitPostponeTime":30000"#;
+        let mut sim = Sim::new(limit);
+        sim.run_until(70_000);
+        let log = sim.take_log();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].1, "Daily limit");
+        assert!((60_000..=62_000).contains(&log[0].0), "{:?}", log[0]);
+        assert!(sim.core.on_daily_limit(true, sim.now) == vec![Effect::CloseDailyLimit]);
+        sim.run_until(110_000);
+        assert_eq!(sim.take_log().len(), 1, "again after 30 s more use");
+        sim.core.on_daily_limit(false, sim.now);
+        sim.run_until(500_000);
+        assert!(sim.take_log().is_empty(), "done for today");
+        let today = sim.core.today_statistics(sim.now);
+        assert_eq!(
+            (today.daily_limit_shown, today.daily_limit_stopped),
+            (2, true)
+        );
+        assert!(today.active_ms.is_some_and(|ms| ms > 400_000));
+    }
+
+    #[test]
+    fn statistics_count_shown_completed_and_postponed_breaks() {
+        let mut sim = Sim::new(r#","miniBreakPostpone":true,"miniBreakPostponeTime":10000"#);
+        sim.run_until(31_000);
+        sim.press(BreakButton::Postpone);
+        sim.run_until(55_000);
+        let today = sim.core.today_statistics(sim.now);
+        assert_eq!(today.day, "2026-11-09");
+        assert_eq!((today.mini.shown, today.mini.postponed), (2, 1));
+        assert_eq!(today.mini.completed, 1);
+        assert_eq!(
+            today.active_ms, None,
+            "no activity measured with both features off"
+        );
+        assert!(!sim.core.statistics_to_save(sim.now).is_empty());
+        assert!(sim.core.statistics_to_save(sim.now).is_empty());
     }
 }
