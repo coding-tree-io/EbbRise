@@ -1,0 +1,519 @@
+{
+  "main": {
+    "toolTipHeader": "Stretchly – appen för pauspåminnelser",
+    "miniBreakIn": "Kort paus om $t(utils.seconds, {'count': {{seconds}} })",
+    "longBreakIn": "Lång paus om $t(utils.seconds, {'count': {{seconds}} })",
+    "resumingBreaks": "Återupptar pauser",
+    "downloadLatestVersion": "Hämta den senaste versionen",
+    "toLongBreak": "Ta en lång paus",
+    "toMiniBreak": "Ta en kort paus",
+    "skipToTheNext": "Hoppa till nästa",
+    "resume": "Återuppta pauser",
+    "pause": "Pausa pauser",
+    "untilMorning": "Till morgonen",
+    "indefinitely": "Tills vidare",
+    "resetBreaks": "Återställ pauser",
+    "quitStretchly": "Avsluta Stretchly",
+    "restoreDefaults": "Återställ till standardvärden",
+    "warning": "Detta återställer appens standardvärden. Alla dina inställningar går förlorade.",
+    "continue": "Fortsätt",
+    "cancel": "Avbryt",
+    "preferences": "Inställningar",
+    "contributorPreferences": "Bidragsgivarinställningar",
+    "syncPreferences": "Synkroniseringsinställningar"
+  },
+  "break": {
+    "postpone": "Skjut upp pausen",
+    "skip": "Hoppa över pausen",
+    "title": "Dags att ta en paus!",
+    "finish": "Avsluta pausen"
+  },
+  "preferences": {
+    "title": "Stretchly-inställningar",
+    "nav": {
+      "settings": "Inställningar",
+      "schedule": "Schema",
+      "theme": "Tema",
+      "about": "Om",
+      "heart": "Älska Stretchly"
+    },
+    "settings": {
+      "openAtLogin": "Starta Stretchly automatiskt när du loggar in",
+      "showBreaksIn": "Visa pauser i:",
+      "window": "Fönster",
+      "fullscreen": "Helskärm",
+      "showIdeas": "Visa pausidéer under pauser",
+      "allScreens": "Visa pauser på alla skärmar",
+      "monitorIdleTime": "Övervaka systemets inaktivitetstid (nedräkningen pausas när systemet är inaktivt).",
+      "monitorDnd": "Visa pauser även när Stör ej är aktiverat",
+      "language": "Språk:",
+      "restoreDefaults": "Återställ till standardvärden"
+    },
+    "schedule": {
+      "miniBreaks": "Korta pauser:",
+      "miniBreaksInfo": "Korta pauser tas regelbundet och ger dig möjlighet att sträcka på dig och koppla av.",
+      "enableMiniBreaks": "Aktivera korta pauser",
+      "breakFor": "Paus i:",
+      "every": "Varje:",
+      "showNotificationBeforeMiniBreak": "Visa en avisering innan en kort paus börjar",
+      "enablePostponeMini": "Tillåt att korta pauser skjuts upp",
+      "longBreaks": "Långa pauser:",
+      "longBreaksInfo": "Långa pauser tas mer sällan men varar längre, så att du kan ta en ordentlig paus från arbetet.",
+      "enableLongBreaks": "Aktivera långa pauser",
+      "showNotificationBeforeLongBreak": "Visa en avisering innan en lång paus börjar",
+      "enablePostponeLong": "Tillåt att långa pauser skjuts upp",
+      "strictMode": "Strikt läge:",
+      "strictModeInfo": "Strikt läge hindrar dig från att hoppa över korta och långa pauser och hjälper dig att följa pausschemat.",
+      "enableStrictMini": "Aktivera strikt läge för korta pauser",
+      "enableStrictLong": "Aktivera strikt läge för långa pauser",
+      "cantDisableBoth": "Båda typerna av pauser kan inte inaktiveras samtidigt"
+    },
+    "theme": {
+      "appearance": "Utseende:",
+      "greenClouds": "Gröna moln",
+      "autumnBeBlessed": "Välsignad höst",
+      "graphiteCrystal": "Grafitkristall",
+      "coffeeKisses": "Kaffekyssar",
+      "morningSwim": "Morgonbad",
+      "transparentMode": "Aktivera transparens",
+      "sounds": "Ljud:",
+      "enableSounds": "Aktivera ljud",
+      "crystalGlass": "Kristallglas",
+      "windChime": "Vindspel",
+      "ticToc": "Tick-tack",
+      "trayIcon": "Ikon i systemfältet eller menyraden:",
+      "colour": "Färg",
+      "monochrome": "Svartvit",
+      "invertedMonochrome": "Inverterad svartvit",
+      "snowWhite": "Snövit",
+      "reverie": "Dagdröm",
+      "silence": "Tystnad",
+      "trayIconStyleLabel": "Stil:",
+      "trayIconStyleDefault": "Standard",
+      "trayIconStyleTime": "Tid till paus"
+    },
+    "about": {
+      "tagline": "Appen för pauspåminnelser",
+      "version": "Version ",
+      "latestVersion": "Senaste version ",
+      "notifyNewVersion": "Meddela automatiskt om appuppdateringar",
+      "learnMore": "Du kan läsa om Stretchlys funktioner, se en handledning, hämta den senaste versionen eller få support genom att ",
+      "ourWebsite": "besöka vår webbplats",
+      "dot": ".",
+      "developedBy": "Utvecklad av",
+      "janH": "Jan Hovancik",
+      "designedBy": "Ikon- och användargränssnittsdesign av Colin Shanley",
+      "checkNewVersion": "Sök automatiskt efter nya versioner"
+    },
+    "heart": {
+      "loveStretchly": "Gillar du Stretchly?",
+      "desc1": "Regelbundna pauser vid datorarbete är viktiga för både det fysiska och psykiska välbefinnandet.",
+      "desc2": "Stretchly är gratis. Du kan stödja utvecklingen genom att donera och hjälpa oss att fortsätta förbättra Stretchly och utveckla annan fri programvara.",
+      "becomeContributor": "Bli supporter",
+      "alreadyContributor": "Jag är redan en bidragsgivare",
+      "authenticateUsing": "Autentisera med:",
+      "contributorPreferences": "Bidragsgivarinställningar",
+      "syncPreferences": "Synkroniseringsinställningar"
+    }
+  },
+  "contributorPreferences": {
+    "0": "Första bildskärmen",
+    "1": "Andra bildskärmen",
+    "2": "Tredje bildskärmen",
+    "3": "Fjärde bildskärmen",
+    "4": "Femte bildskärmen",
+    "title": "Bidragsgivarinställningar",
+    "notifications": "Pausaviseringar:",
+    "notificationsInfo": "Systemaviseringar visas före pauser så att du hinner förbereda dig.",
+    "beforeLongBreak": "Lång paus:",
+    "beforeMiniBreak": "Kort paus:",
+    "newVersion": "Ny version:",
+    "newVersionNotification": "Avisera när en ny version är tillgänglig",
+    "customIdeas": "Anpassade pausidéer:",
+    "customIdeasInfo": "Använd egna pausidéer genom att redigera konfigurationsfilen. (För avancerade användare.)",
+    "useIdeasFromSettings": "Använd pausidéer från konfigurationsfilen",
+    "breakPostpone": "Uppskjutning av pauser:",
+    "breakPostponeInfo": "Om uppskjutning är aktiverad i huvudinställningarna kan du här ange när, hur länge och hur många gånger en paus får skjutas upp.",
+    "miniBreaks": "Korta pauser:",
+    "postponableFor": "Kan skjutas upp under:",
+    "postponeFor": "Skjut upp med:",
+    "maxPostpones": "Högsta antal uppskjutningar:",
+    "longBreaks": "Långa pauser:",
+    "pauseUntilMorning": "Pausa till morgonen:",
+    "pauseUntil": "Pausa till:",
+    "pauseUntilMorningInfo": "Ange till vilken tid alternativet ”Pausa till morgonen” ska gälla.",
+    "welcomeWindow": "Välkomstfönster:",
+    "showWelcomeWindow": "Visa välkomstfönstret vid nästa start",
+    "opacityTheme": "Temats genomskinlighet:",
+    "opacityInfo": "Hur ogenomskinligt ska pausfönstret vara?",
+    "opacity": "Ogenomskinlighet:",
+    "breakWindowSize": "Pausfönstrets storlek:",
+    "breakWindowSizeInfo": "Hur stor del av skärmen ska pausfönstret täcka?",
+    "breakWindowWidth": "Bredd:",
+    "breakWindowHeight": "Höjd:",
+    "sounds": "Ljud:",
+    "volume": "Volym:",
+    "miniBreakStartSound": "Ljud i början av kort paus",
+    "longBreakStartSound": "Ljud i början av lång paus",
+    "naturalBreaks": "Naturliga pauser:",
+    "naturalBreaksInfo": "Om övervakning av inaktivitet är aktiverad i huvudinställningarna kan du ange efter hur lång inaktivitet nedräkningen ska pausas.",
+    "pauseAfter": "Pausa efter:",
+    "appearance": "Utseende:",
+    "light": "Ljust",
+    "dark": "Mörkt",
+    "system": "System",
+    "cursor": "Följ markören",
+    "showBreaksAsRegularWindowsTitle": "Vanliga fönster:",
+    "showBreaksAsRegularWindows": "Visa pauser som vanliga fönster",
+    "screen": "Skärm för pauser:",
+    "showOnMonitor": "Visa pauser på",
+    "primary": "Primär bildskärm",
+    "screenInfo": "När pauser inte visas på alla skärmar kan du välja vilken skärm de ska visas på.",
+    "timeToBreakInTray": "Dags för paus",
+    "showTimeToBreakInTray": "Visa tiden till nästa paus i menyradsikonen",
+    "currentTimeInBreaks": "Aktuell tid",
+    "showCurrentTimeInBreaks": "Visa aktuell lokal tid i pausfönster",
+    "showBreaksAsRegularWindowsInfo": "När detta är aktiverat kan pausfönstren få fokus, de ligger inte längre alltid överst och visas även i aktivitetsfältet.",
+    "showTrayIcon": "Visa ikonen i systemfältet eller menyraden",
+    "toShowTrayIcon": "Visa Stretchly-ikonen i systemfältet eller menyraden"
+  },
+  "utils": {
+    "none_one": "{{count}}",
+    "none_other": "{{count}}",
+    "percent_one": "{{count}} procent",
+    "percent_other": "{{count}} procent",
+    "oclock_one": "Klockan {{count}}",
+    "oclock_other": "Klockan {{count}}",
+    "seconds_one": "{{count}} sekund",
+    "seconds_other": "{{count}} sekunder",
+    "minutes_one": "{{count}} minut",
+    "minutes_other": "{{count}} minuter",
+    "hours_one": "{{count}} timme",
+    "hours_other": "{{count}} timmar",
+    "remaining": "{{count}} återstår",
+    "inAbout": "om ungefär {{count}}",
+    "elapsed": "{{count}} har gått"
+  },
+  "process": {
+    "newVersionAvailable": "Ny version är tillgänglig!"
+  },
+  "welcome": {
+    "title": "Välkommen till Stretchly",
+    "breakTimeReminderApp": "Appen för pauspåminnelser",
+    "viewTutorial": "Visa handledning",
+    "openPreferences": "Öppna inställningar",
+    "getStarted": "Kom igång"
+  },
+  "statusMessages": {
+    "paused": "Pausad",
+    "indefinitely": "Tills vidare",
+    "dndMode": "Stör ej är aktiverat",
+    "nextLongBreak": "Nästa långa paus",
+    "nextMiniBreak": "Nästa korta paus",
+    "afterMiniBreak_one": "om {{count}} kort paus",
+    "afterMiniBreak_other": "om {{count}} korta pauser",
+    "resuming": "Återupptar",
+    "appExclusion": "Regel för undantagna appar"
+  },
+  "miniBreakIdeas": {
+    "aaa": {
+      "text": "Gå och ta ett glas vatten."
+    },
+    "aab": {
+      "text": "Titta långsamt så långt du kan åt vänster och sedan åt höger."
+    },
+    "aac": {
+      "text": "Titta långsamt så långt du kan uppåt och sedan nedåt."
+    },
+    "aad": {
+      "text": "Blunda och ta några djupa andetag."
+    },
+    "aae": {
+      "text": "Blunda och slappna av."
+    },
+    "aaj": {
+      "text": "Luta långsamt huvudet åt ena sidan och håll kvar i 5–10 sekunder."
+    },
+    "aak": {
+      "text": "Stå upp från din stol och sträck på dig."
+    },
+    "aal": {
+      "text": "Fäst blicken på ett föremål minst 20 meter bort."
+    },
+    "aan": {
+      "text": "Ta en stund och le åt att du lever."
+    },
+    "aao": {
+      "text": "En verkligt ergonomisk arbetsplats är en plats som du regelbundet lämnar."
+    },
+    "aap": {
+      "text": "Blunda och räkna dina andetag."
+    },
+    "aaq": {
+      "text": "Blunda och lägg märke till vad du hör."
+    },
+    "aam": {
+      "text": "Ta en stund och tänk på något du är tacksam för."
+    },
+    "aax": {
+      "text": "Om du behöver hjälp, be om det."
+    },
+    "aay": {
+      "text": "Gör en sak i taget."
+    },
+    "aaw": {
+      "text": "Fäst blicken på ett föremål sex meter bort i 20 sekunder var 20:e minut."
+    },
+    "aaz": {
+      "text": "Använder du din uppmärksamhet klokt?"
+    },
+    "abj": {
+      "text": "Stå upp, luta långsamt huvudet mot ena axeln och dra försiktigt med handen på samma sida tills det sträcker."
+    },
+    "abk": {
+      "text": "Stå upp med armarna längs sidorna. Pressa ihop skulderbladen och håll kvar."
+    },
+    "aaf": {
+      "text": "Sträck på benen."
+    },
+    "aag": {
+      "text": "Sträck ut armarna."
+    },
+    "aah": {
+      "text": "Är din sittställning korrekt?"
+    },
+    "aai": {
+      "text": "Vrid långsamt huvudet åt ena sidan och håll kvar i 10 sekunder."
+    },
+    "aar": {
+      "text": "Placera fingertopparna på axlarna. Rulla axlarna framåt i 10 sekunder och sedan bakåt."
+    },
+    "aas": {
+      "text": "Lyft höger arm och sträck den över huvudet åt vänster. Håll kvar i 10 sekunder och upprepa på andra sidan."
+    },
+    "aat": {
+      "text": "Ta ett finger i taget på vänster hand med höger hand och kläm försiktigt. Upprepa med den andra handen."
+    },
+    "aau": {
+      "text": "Stå upp och gör ett utfall. Håll kvar i 10 sekunder och byt sedan ben."
+    },
+    "aav": {
+      "text": "Blunda och märk helt enkelt vad som än uppstår i det aktuella ögonblicket, utan att döma."
+    },
+    "aba": {
+      "text": "Ändra din sittställning."
+    },
+    "abc": {
+      "text": "Blunda och för långsamt och försiktigt blicken upp mot taket och sedan ned mot golvet."
+    },
+    "abd": {
+      "text": "Blunda och för långsamt och försiktigt blicken åt vänster och sedan åt höger."
+    },
+    "abe": {
+      "text": "Skaka loss händerna för att slappna av."
+    },
+    "abf": {
+      "text": "För en fingertopp i taget mot tummen så att fingrarna bildar ett O."
+    },
+    "abg": {
+      "text": "Knyt handen och sträck sedan upp fingrarna mot taket, som om du gör ett stopptecken."
+    },
+    "abh": {
+      "text": "Knyt handen och spreta sedan med fingrarna så långt du kan."
+    },
+    "abi": {
+      "text": "Sitt upprätt med armarna längs sidorna och rulla långsamt huvudet i en stor cirkel."
+    },
+    "abl": {
+      "text": "Stå upp med armarna lyfta i axelhöjd. För händerna något bakåt, håll kvar en sekund och återgå."
+    },
+    "abb": {
+      "text": "Låt ögonen få naturligt ljus."
+    },
+    "abo": {
+      "text": "Stå med fötterna axelbrett isär. Sänk kroppen som om du skulle sätta dig på en stol och res dig sedan igen. Upprepa flera gånger."
+    },
+    "abr": {
+      "text": "Sitt på stolens kant och sträck ut ett ben framför dig. Håll kvar i 10–15 sekunder och byt ben."
+    },
+    "abs": {
+      "text": "Stå vänd mot en vägg med ena foten bakom den andra och luta dig framåt mot väggen. Upprepa med det andra benet."
+    },
+    "abv": {
+      "text": "För ena armen över bröstet, håll om armbågen med den andra handen och dra försiktigt armen mot bröstet. Upprepa med den andra armen."
+    },
+    "abw": {
+      "text": "Stå upp och placera ena foten på ett närliggande föremål, exempelvis en stol eller pall. Böj dig framåt mot tårna och byt sedan ben."
+    },
+    "abm": {
+      "text": "Sitt på stolens kant, vrid överkroppen åt ena sidan och håll kvar i 10–15 sekunder. Upprepa åt andra sidan."
+    },
+    "abn": {
+      "text": "Stå upp och placera ena foten på ett närliggande föremål, exempelvis en stol eller pall. Håll knät böjt i 10–15 sekunder och byt fot."
+    },
+    "abp": {
+      "text": "Stå med ryggen och händerna mot en vägg. För långsamt armarna uppåt och nedåt som om du gjorde snöänglar."
+    },
+    "abq": {
+      "text": "Stå vänd mot en vägg, placera händerna mot den och gör några armhävningar."
+    },
+    "abt": {
+      "text": "Håll ena armen rakt upp. Använd den andra handen för att försiktigt föra armbågen mot huvudet. Håll kvar i 10–15 sekunder och byt arm."
+    },
+    "abu": {
+      "text": "Luta huvudet åt ena sidan och sedan åt den andra. Luta det därefter försiktigt framåt och bakåt."
+    },
+    "abx": {
+      "text": "Stå i en dörröppning med en arm mot vardera sidan. Luta dig försiktigt framåt tills det sträcker över bröstet."
+    },
+    "aby": {
+      "text": "Sitt på stolens kant eller på golvet med fotsulorna mot varandra. Pressa försiktigt ned knäna med armbågarna för att sträcka insidan av låren."
+    }
+  },
+  "longBreakIdeas": {
+    "aae": {
+      "text": "När du tittar länge på en skärm blinkar du mer sällan och ögonen utsätts mer för luft. Blinka snabbt i några sekunder för att återfukta tårfilmen och avlägsna damm från ögats yta.",
+      "title": "Blinka"
+    },
+    "aad": {
+      "text": "Forskning tyder på att mindfulnessövningar kan minska ångest, depression, stress och smärta samt förbättra hälsa och livskvalitet. Det finns många appar som kan hjälpa dig att komma igång.",
+      "title": "Meditation"
+    },
+    "aal": {
+      "title": "Aktiva möten",
+      "text": "Vad sägs om att flytta mötet från konferensrummet till en promenad? Att gå förbränner inte bara kalorier utan kan även främja samarbete."
+    },
+    "aak": {
+      "text": "Nyare forskning visar att långvarigt sittande bland annat ökar risken för metabolt syndrom, hjärtinfarkt och stroke. Regelbundna promenadpauser kan förbättra cirkulationen och motverka några av riskerna.",
+      "title": "Ämnesomsättning"
+    },
+    "aaq": {
+      "text": "I en studie med friska frivilliga fann NIH-forskare att korta och regelbundna pauser tidigt i inlärningen kan hjälpa hjärnan att lära sig nya färdigheter.",
+      "title": "Inlärning"
+    },
+    "aas": {
+      "title": "Upprepa",
+      "text": "Har du hittat en Stretchly-rutin som passar dig? Upprepa den gärna flera gånger för att bättre motverka effekterna av långvarigt sittande."
+    },
+    "aat": {
+      "title": "Handleder och underarmar",
+      "text": "Sträck ut armarna med handflatorna vända mot dig. Rotera långsamt händerna fyra varv medurs och därefter fyra varv moturs."
+    },
+    "aar": {
+      "title": "Träning",
+      "text": "Forskning tyder på att små mängder regelbunden motion kan ge stora hälsofördelar, bland annat mätbart minskad stress."
+    },
+    "aau": {
+      "title": "Sträckning av ryggen",
+      "text": "Knäpp händerna bakom huvudet, lyft dem över huvudet och avsluta med handflatorna vända uppåt."
+    },
+    "aav": {
+      "title": "Mobilisera",
+      "text": "För varje halvtimme av stillasittande bör du röra på dig i minst en minut."
+    },
+    "aaz": {
+      "title": "Skapa konst",
+      "text": "Konstnärligt skapande kan ha positiva effekter på den psykiska hälsan, särskilt vid stress. Skriv en kort dikt, ta ett fotografi eller måla något litet."
+    },
+    "aaw": {
+      "title": "7-minuterspass",
+      "text": "Detta är ett helkroppspass som tar kort tid. Var försiktig, precis som vid all annan träning. Det finns många appar som kan hjälpa dig att komma igång."
+    },
+    "aax": {
+      "title": "Puls",
+      "text": "Höj pulsen till 120 slag per minut i 20 minuter, fyra eller fem gånger i veckan, genom en aktivitet som du tycker om. Regelbunden pulshöjande aktivitet förbättrar hjärt- och kärlhälsan."
+    },
+    "aay": {
+      "title": "Ta trappan",
+      "text": "Studier har visat att trappgång, som räknas som intensiv fysisk aktivitet, kan förbränna fler kalorier per minut än jogging."
+    },
+    "abd": {
+      "title": "Gäspning",
+      "text": "Att gäspa kan vara väldigt användbart, eftersom det producerar tårar för att fukta och smörja ögonen."
+    },
+    "abe": {
+      "title": "Fokusbyte",
+      "text": "Håll ett finger nära ögat och fokusera på det. Flytta långsamt fingret bortåt, fokusera sedan på något långt borta och därefter åter på fingret. För tillbaka fingret och fokusera åter på något på avstånd."
+    },
+    "abc": {
+      "text": "Om du regelbundet åker kollektivt kan du stå i stället för att sitta. Försök också, när det är möjligt, att ersätta några av dina dagliga resor med promenader eller cykling.",
+      "title": "Kollektivtrafik"
+    },
+    "aaa": {
+      "title": "Inte ensam",
+      "text": "Tycker du att det är svårt att ta en paus ensam? Försök att göra det med en kollega. Förutom att göra det enklare att hålla sig till pauser kommer du att ha en chans att lära känna dem bättre. Att ta pauser tillsammans ökar produktiviteten."
+    },
+    "aab": {
+      "title": "Gå undan",
+      "text": "Har du märkt att hjärnan ibland löser problem av sig själv? Gå undan från datorn och ta en paus där du tänker på något helt annat."
+    },
+    "aac": {
+      "text": "Vila är viktig för rörelseapparatens funktion. Regelbundna pauser kan minska den sammanhängande tiden för en uppgift och därmed exponeringen för ergonomiska belastningsrisker.",
+      "title": "Mikropauser"
+    },
+    "aaf": {
+      "title": "Ergonomi",
+      "text": "Felaktig höjd och vinkel på tangentbordet, musen, skärmen eller arbetsytan kan orsaka hälsoproblem. Ta dig tid att läsa om skrivbordsergonomi."
+    },
+    "aag": {
+      "title": "Rör på dig",
+      "text": "Det finns många sätt att motionera på kontoret. Prova att marschera på stället eller göra armhävningar mot skrivbordet."
+    },
+    "aah": {
+      "title": "Ändra",
+      "text": "Har du en balansboll eller ett höj- och sänkbart skrivbord? Växla gärna arbetsställning en stund."
+    },
+    "aai": {
+      "title": "Observera",
+      "text": "Dagdrömmer du eller har du svårt att fokusera? Det är ett tecken på att du behöver ta en paus."
+    },
+    "aam": {
+      "title": "Frukt",
+      "text": "Ta dig tid att äta lite frukt, långsamt. Lägg märke till smaken, konsistensen och friskheten."
+    },
+    "aan": {
+      "title": "Toalettpaus",
+      "text": "Välj toaletten längst bort på arbetsplatsen när du ändå ska gå."
+    },
+    "aao": {
+      "text": "Ska du ta en fikapaus? Lägg gärna till en fem minuters promenad.",
+      "title": "Fika"
+    },
+    "aap": {
+      "title": "Kollegor",
+      "text": "Skicka inte alltid e-post eller meddelanden till kollegor på samma kontor. Gå ibland till deras skrivbord och prata med dem."
+    },
+    "aba": {
+      "text": "En ren arbetsplats kan göra det lättare att fokusera och förknippas ofta med positiva känslor.",
+      "title": "Städa"
+    },
+    "abb": {
+      "title": "Lunch ute",
+      "text": "Naturmiljöer förknippas med positiva känslor och minskad stress och ångest. Ät gärna lunch utomhus bland grönska när det är möjligt."
+    },
+    "abg": {
+      "title": "Handstyrka",
+      "text": "Krama ett par hoprullade strumpor eller en mjuk gummiboll och håll kvar i fem sekunder. Upprepa några gånger."
+    },
+    "abh": {
+      "title": "Långsam andning",
+      "text": "Forskning tyder på att kontrollerad, långsam andning kan påverka fysiologiska parametrar som förknippas med hälsa och livslängd."
+    },
+    "abf": {
+      "text": "Sitt ned och stöd armbågarna nära skrivbordskanten. Luta dig framåt och kupa händerna över ögonen utan att trycka. Blunda och andas långsamt genom näsan några gånger.",
+      "title": "Kupade händer"
+    },
+    "abi": {
+      "title": "Fantasifull visualisering",
+      "text": "Blunda och föreställ dig en fridfull plats, exempelvis en strand eller skog. Fokusera på miljöns synintryck, ljud och förnimmelser."
+    },
+    "aaj": {
+      "title": "Teknik",
+      "text": "Vad sägs om att ta en promenad utan tekniska enheter?"
+    },
+    "abj": {
+      "title": "Överväldigad?",
+      "text": "Prova jordningsövningen 5–4–3–2–1: identifiera fem saker du ser, fyra du kan röra vid, tre du hör, två du känner lukten av och en du kan smaka."
+    }
+  }
+}
