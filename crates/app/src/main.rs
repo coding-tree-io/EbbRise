@@ -6,13 +6,14 @@ mod logging;
 mod logic;
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use breaks::until_morning;
 use commands::Command;
 use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
 use settings::Settings;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -24,8 +25,10 @@ const APP_ID: &str = "StretchCore";
 struct Windows;
 
 impl Environment for Windows {
-    fn running_processes(&self) -> Vec<String> {
+    fn running_processes(&self) -> Option<Vec<String>> {
         platform::running_process_names()
+            .inspect_err(|error| warn!(%error, "process list unavailable"))
+            .ok()
     }
 
     fn until_morning(&self, settings: &Settings) -> Option<i64> {
@@ -44,13 +47,27 @@ struct App {
     tray: TrayIcon,
 }
 
+type AppAction = Box<dyn FnOnce(&mut App)>;
+
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
+    /// Actions that arrived while another action ran: a Windows call inside an action can
+    /// deliver a tray, menu or OS event to this thread, which then waits here.
+    static WAITING: RefCell<VecDeque<AppAction>> = const { RefCell::new(VecDeque::new()) };
 }
 
-fn with_app(action: impl FnOnce(&mut App)) {
+/// Runs `action` on the app, after any actions that are still waiting.
+fn with_app(action: impl FnOnce(&mut App) + 'static) {
+    WAITING.with(|waiting| waiting.borrow_mut().push_back(Box::new(action)));
     APP.with(|app| {
-        if let Some(app) = app.borrow_mut().as_mut() {
+        // Busy: the action that is running takes this one when it is done.
+        let Ok(mut app) = app.try_borrow_mut() else {
+            return;
+        };
+        let Some(app) = app.as_mut() else {
+            return;
+        };
+        while let Some(action) = WAITING.with(|waiting| waiting.borrow_mut().pop_front()) {
             action(app);
         }
     });
@@ -86,7 +103,7 @@ fn main() {
     }));
     MenuEvent::set_event_handler(Some(|event: MenuEvent| {
         if let Some(action) = MenuAction::from_id(event.id.0.as_str()) {
-            with_app(|app| app.on_menu(action));
+            with_app(move |app| app.on_menu(action));
         }
     }));
 

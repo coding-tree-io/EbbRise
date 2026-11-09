@@ -64,3 +64,16 @@ fn broken_config_is_reported_and_left_untouched() {
     assert_eq!(fs::read_to_string(&own).unwrap(), "{oops");
     fs::remove_dir_all(folder).unwrap();
 }
+
+#[test]
+fn unreadable_stretchly_config_fails_the_import_so_the_next_start_retries() {
+    let folder = empty_folder("unreadable");
+    let own = folder.join("stretch-core").join("config.json");
+    // A folder in place of the file: it exists but cannot be read as text.
+    let stretchly = folder.join("Stretchly").join("config.json");
+    fs::create_dir_all(&stretchly).unwrap();
+
+    assert!(Settings::load_or_import(&own, &stretchly).is_err());
+    assert!(!own.exists());
+    fs::remove_dir_all(folder).unwrap();
+}

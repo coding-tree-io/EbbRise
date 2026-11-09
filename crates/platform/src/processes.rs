@@ -3,21 +3,23 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 
-/// Executable names of all running processes, such as `Code.exe`; empty if Windows refuses.
+/// Executable names of all running processes, such as `Code.exe`.
 ///
 /// Matches upstream's `ps-list` on Windows, which also gives names only, not command lines.
-pub fn running_process_names() -> Vec<String> {
-    // SAFETY: no pointers are passed; the handle is checked and closed below.
-    let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }) else {
-        return Vec::new();
-    };
+///
+/// # Errors
+/// When Windows cannot take or read the process snapshot.
+pub fn running_process_names() -> windows::core::Result<Vec<String>> {
+    // SAFETY: no pointers are passed; the handle is closed below.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }?;
     let mut entry = PROCESSENTRY32W {
         dwSize: size_of::<PROCESSENTRY32W>() as u32,
         ..Default::default()
     };
     let mut names = Vec::new();
     // SAFETY: `snapshot` is a valid process snapshot and `entry` has `dwSize` set, as the API requires.
-    let mut found = unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok();
+    let first = unsafe { Process32FirstW(snapshot, &mut entry) };
+    let mut found = first.is_ok();
     while found {
         let length = entry
             .szExeFile
@@ -30,5 +32,6 @@ pub fn running_process_names() -> Vec<String> {
     }
     // SAFETY: `snapshot` is open and not used after this.
     let _ = unsafe { CloseHandle(snapshot) };
-    names
+    // Without a first entry there is no list at all, not an empty one.
+    first.map(|()| names)
 }

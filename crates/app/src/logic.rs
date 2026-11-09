@@ -70,8 +70,8 @@ pub struct Wake {
 
 /// What the core asks the OS for only when it needs it.
 pub trait Environment {
-    /// Executable names of the running processes.
-    fn running_processes(&self) -> Vec<String>;
+    /// Executable names of the running processes; `None` when Windows cannot list them.
+    fn running_processes(&self) -> Option<Vec<String>>;
     /// Milliseconds until the configured morning; `None` when there is no morning time.
     fn until_morning(&self, settings: &Settings) -> Option<i64>;
 }
@@ -138,11 +138,13 @@ impl Core {
         Vec::new()
     }
 
-    /// When the next app exclusion check is due; `None` without an active rule.
+    /// When the next app exclusion check is due; `None` without an active rule or while
+    /// paused, as upstream stops its poller. The first check after a pause is due at once.
     fn app_exclusion_check_due(&self) -> Option<i64> {
         let settings = self.settings();
         let active_rule = settings.app_exclusions.iter().any(|rule| rule.active);
-        active_rule.then(|| self.exclusion_checked_at + settings.app_exclusions_check_interval)
+        (active_rule && !self.planner.paused())
+            .then(|| self.exclusion_checked_at + settings.app_exclusions_check_interval)
     }
 
     fn check_app_exclusion(&mut self, now: i64, os: &impl Environment) -> Vec<Toast> {
@@ -150,7 +152,10 @@ impl Core {
             return Vec::new();
         }
         self.exclusion_checked_at = now;
-        let names = os.running_processes();
+        // A failed list says nothing about the excluded app, so the hold stays as it is.
+        let Some(names) = os.running_processes() else {
+            return Vec::new();
+        };
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         let events = self.planner.processes_changed(now, &names);
         events
@@ -368,14 +373,14 @@ mod tests {
 
     #[derive(Default)]
     struct FakeOs {
-        /// Process names Windows would list now.
-        running: Vec<String>,
+        /// Process names Windows would list now; `None` when Windows refuses the list.
+        running: Option<Vec<String>>,
         process_reads: std::cell::Cell<usize>,
         morning: Option<i64>,
     }
 
     impl Environment for FakeOs {
-        fn running_processes(&self) -> Vec<String> {
+        fn running_processes(&self) -> Option<Vec<String>> {
             self.process_reads.set(self.process_reads.get() + 1);
             self.running.clone()
         }
@@ -395,7 +400,10 @@ mod tests {
                 away_since: None,
                 log: Vec::new(),
                 wakes: 0,
-                os: FakeOs::default(),
+                os: FakeOs {
+                    running: Some(Vec::new()),
+                    ..FakeOs::default()
+                },
                 last_text: String::new(),
             }
         }
@@ -563,15 +571,36 @@ mod tests {
     fn pause_exclusion_holds_breaks_while_its_app_runs() {
         let mut sim =
             Sim::new(r#","appExclusions":[{"rule":"pause","active":true,"commands":["meeting"]}]"#);
-        sim.os.running = vec!["meeting.exe".into()];
+        sim.os.running = Some(vec!["meeting.exe".into()]);
         sim.run_until(50_000);
         assert_eq!(sim.take_log(), log(&[]));
 
-        sim.os.running.clear();
+        sim.os.running = Some(Vec::new());
         sim.run_until(80_000);
         // The next 2 s check, at 52 s, sees the app gone and restarts the cycle.
         assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
         assert_eq!(sim.os.process_reads.get(), 40);
+    }
+
+    #[test]
+    fn exclusion_holds_when_the_process_list_fails_and_rests_during_a_pause() {
+        let mut sim =
+            Sim::new(r#","appExclusions":[{"rule":"pause","active":true,"commands":["meeting"]}]"#);
+        sim.os.running = Some(vec!["meeting.exe".into()]);
+        sim.run_until(10_000);
+        sim.os.running = None;
+        sim.run_until(50_000);
+        assert_eq!(
+            sim.take_log(),
+            log(&[]),
+            "a failed list is not a closed app"
+        );
+
+        sim.core
+            .on_menu(MenuAction::PauseIndefinitely, sim.now, &sim.os);
+        let reads = sim.os.process_reads.get();
+        sim.run_until(100_000);
+        assert_eq!(sim.os.process_reads.get(), reads, "no checks while paused");
     }
 
     #[test]
@@ -581,7 +610,7 @@ mod tests {
         sim.run_until(50_000);
         assert_eq!(sim.take_log(), log(&[]));
 
-        sim.os.running = vec!["focus-timer.exe".into()];
+        sim.os.running = Some(vec!["focus-timer.exe".into()]);
         sim.run_until(75_000);
         assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
     }

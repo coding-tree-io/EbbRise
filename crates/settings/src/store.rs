@@ -10,16 +10,18 @@ impl Settings {
     /// Stretchly config imports the defaults.
     ///
     /// # Errors
-    /// When `own` cannot be read or parsed, or the first save fails. A broken `own` stays as
-    /// it is, so the user can repair it.
+    /// When `own` cannot be read or parsed, when `stretchly` exists but cannot be read, or
+    /// when the first save fails. Nothing is saved then, so the next start tries again. A
+    /// broken `own` stays as it is, so the user can repair it.
     pub fn load_or_import(own: &Path, stretchly: &Path) -> io::Result<Self> {
         match fs::read_to_string(own) {
             Ok(text) => Ok(Self::from_json(&text)?),
             Err(error) if error.kind() == ErrorKind::NotFound => {
-                let imported = fs::read_to_string(stretchly)
-                    .ok()
-                    .and_then(|text| Self::from_json(&text).ok())
-                    .unwrap_or_default();
+                let imported = match fs::read_to_string(stretchly) {
+                    Ok(text) => Self::from_json(&text).unwrap_or_default(),
+                    Err(error) if error.kind() == ErrorKind::NotFound => Self::default(),
+                    Err(error) => return Err(error),
+                };
                 imported.save(own)?;
                 Ok(imported)
             }

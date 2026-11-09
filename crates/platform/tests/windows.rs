@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use platform::{Signal, SignalWindow, awake_ms, idle_ms};
-use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
 };
@@ -130,7 +130,7 @@ fn clocks_follow_real_time_and_real_input() {
 fn running_processes_include_this_test() {
     let this = std::env::current_exe().unwrap();
     let this = this.file_name().unwrap().to_str().unwrap();
-    let names = platform::running_process_names();
+    let names = platform::running_process_names().unwrap();
     assert!(
         names.iter().any(|name| name == this),
         "{this} not in {names:?}"
@@ -142,18 +142,84 @@ fn running_processes_include_this_test() {
     );
 }
 
-#[test]
-fn command_from_another_instance_arrives_as_a_signal() {
-    let (signals, received) = signal_window();
-    let args: Vec<String> = ["long", "-T", "Stretch up!", "-t", "Ωμέγα"]
+const SEND_TO_VARIABLE: &str = "STRETCH_TEST_SEND_TO";
+
+fn sent_arguments() -> Vec<String> {
+    ["long", "-T", "Stretch up!", "-t", "Ωμέγα"]
         .map(String::from)
-        .into();
-    assert!(platform::send_command(signals.window(), &args));
-    assert!(platform::send_command(signals.window(), &[]));
-    pump(Duration::from_millis(20));
+        .into()
+}
+
+/// The second process of the test below: this test binary, started again with the window
+/// handle in [`SEND_TO_VARIABLE`]. In a normal run the variable is unset and it does nothing.
+#[test]
+fn second_process_sends_commands() {
+    let Ok(window) = std::env::var(SEND_TO_VARIABLE) else {
+        return;
+    };
+    let window = HWND(window.parse::<isize>().unwrap() as *mut _);
+    assert!(platform::send_command(window, &sent_arguments()));
+    assert!(platform::send_command(window, &[]));
+}
+
+#[test]
+fn command_from_another_process_arrives_as_a_signal() {
+    let (signals, received) = signal_window();
+    let mut second = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "second_process_sends_commands"])
+        .env(SEND_TO_VARIABLE, (signals.window().0 as isize).to_string())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while second.try_wait().unwrap().is_none() && Instant::now() < deadline {
+        pump(Duration::from_millis(5));
+    }
+    assert!(second.wait().unwrap().success());
     let received: Vec<Signal> = received.take().into_iter().map(|(s, _)| s).collect();
     assert_eq!(
         received,
-        [Signal::Command(args), Signal::Command(Vec::new())]
+        [
+            Signal::Command(sent_arguments()),
+            Signal::Command(Vec::new())
+        ]
+    );
+}
+
+#[test]
+fn a_signal_during_the_handler_waits_for_it_instead_of_reentering() {
+    let window = Rc::new(std::cell::Cell::new(HWND::default()));
+    let order = Rc::new(RefCell::new(Vec::new()));
+    let (handler_window, handler_order) = (window.clone(), order.clone());
+    let signals = SignalWindow::new(move |signal| {
+        handler_order.borrow_mut().push(format!("start {signal:?}"));
+        if signal == Signal::Lock {
+            // A same-thread send runs the window procedure at once, inside this handler.
+            // SAFETY: the window is live on this thread; the parameters carry no pointers.
+            unsafe {
+                SendMessageW(
+                    handler_window.get(),
+                    WM_WTSSESSION_CHANGE,
+                    Some(WPARAM(WTS_SESSION_UNLOCK as usize)),
+                    Some(LPARAM(0)),
+                )
+            };
+        }
+        handler_order.borrow_mut().push(format!("end {signal:?}"));
+    })
+    .unwrap();
+    window.set(signals.window());
+    // SAFETY: as above.
+    unsafe {
+        SendMessageW(
+            signals.window(),
+            WM_WTSSESSION_CHANGE,
+            Some(WPARAM(WTS_SESSION_LOCK as usize)),
+            Some(LPARAM(0)),
+        )
+    };
+    assert_eq!(
+        *order.borrow(),
+        ["start Lock", "end Lock", "start Unlock", "end Unlock"]
     );
 }

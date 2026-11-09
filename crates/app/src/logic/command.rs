@@ -23,8 +23,9 @@ impl From<BreakIdea> for IdeaOverride {
 
 impl Core {
     /// Runs a forwarded command line. `help`, `version` and `logs` run in the second
-    /// process. `postpone`, `skip` and `finish` need a break window and `preferences` the
-    /// settings window; upstream also drops them when no such window is open.
+    /// process. `postpone`, `skip` and `finish` need a break window, and upstream also drops
+    /// them when none is open. `preferences` waits for the settings window, which upstream
+    /// opens.
     pub(super) fn on_command(&mut self, args: &[String], now: i64, os: &impl Environment) {
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let Some(command) = Command::parse(&args) else {
