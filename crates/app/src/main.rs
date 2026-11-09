@@ -11,10 +11,11 @@ use std::path::{Path, PathBuf};
 
 use breaks::until_morning;
 use commands::Command;
+use i18n::Translator;
 use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
 use settings::Settings;
 use tracing::{error, info, warn};
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::logic::{Core, Environment, MenuAction};
@@ -91,8 +92,8 @@ fn main() {
     let core = Core::new(settings, awake_ms(), signals.focus_assist);
 
     let tray = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu()))
-        .with_tooltip("Stretch")
+        .with_menu(Box::new(tray_menu(core.words())))
+        .with_tooltip(core.words().text("main.toolTipHeader"))
         .with_icon(tray_icon(false))
         .build()
         .expect("tray icon");
@@ -183,19 +184,40 @@ fn run_second_instance(args: &[String]) {
     }
 }
 
-fn tray_menu() -> Menu {
-    let item = |action: MenuAction, text: &str| MenuItem::with_id(action.id(), text, true, None);
+/// Upstream's tray menu, without the items that need a window (Preferences).
+fn tray_menu(words: &Translator) -> Menu {
+    let item =
+        |action: MenuAction, key: &str| MenuItem::with_id(action.id(), words.text(key), true, None);
+    let submenu = |key: &str, items: &[&dyn IsMenuItem]| {
+        Submenu::with_items(words.text(key), true, items).expect("tray submenu")
+    };
+    let pause_hour = MenuItem::with_id(
+        MenuAction::PauseHour.id(),
+        words.count("utils.hours", 1),
+        true,
+        None,
+    );
     Menu::with_items(&[
-        &item(MenuAction::Resume, "Resume"),
-        &item(MenuAction::PauseHour, "Pause for 1 hour"),
-        &item(MenuAction::PauseUntilMorning, "Pause until morning"),
-        &item(MenuAction::PauseIndefinitely, "Pause indefinitely"),
+        &submenu(
+            "main.skipToTheNext",
+            &[
+                &item(MenuAction::SkipToMini, "main.toMiniBreak"),
+                &item(MenuAction::SkipToLong, "main.toLongBreak"),
+            ],
+        ),
+        &item(MenuAction::Resume, "main.resume"),
+        &submenu(
+            "main.pause",
+            &[
+                &pause_hour,
+                &item(MenuAction::PauseUntilMorning, "main.untilMorning"),
+                &PredefinedMenuItem::separator(),
+                &item(MenuAction::PauseIndefinitely, "main.indefinitely"),
+            ],
+        ),
+        &item(MenuAction::Reset, "main.resetBreaks"),
         &PredefinedMenuItem::separator(),
-        &item(MenuAction::SkipToMini, "Skip to mini break"),
-        &item(MenuAction::SkipToLong, "Skip to long break"),
-        &item(MenuAction::Reset, "Reset breaks"),
-        &PredefinedMenuItem::separator(),
-        &item(MenuAction::Quit, "Quit"),
+        &item(MenuAction::Quit, "main.quitStretchly"),
     ])
     .expect("tray menu")
 }

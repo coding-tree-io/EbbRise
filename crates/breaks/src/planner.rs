@@ -101,6 +101,26 @@ impl BreaksPlanner {
         self.away
     }
 
+    /// Do Not Disturb holds breaks.
+    pub fn dnd(&self) -> bool {
+        self.dnd
+    }
+
+    /// An app exclusion rule holds breaks.
+    pub fn excluded(&self) -> bool {
+        self.exclusion
+    }
+
+    /// The pending step (upstream's scheduler `reference`).
+    pub fn next(&self) -> &Event {
+        &self.next
+    }
+
+    /// Breaks planned so far; with Long breaks on, every `longBreakInterval + 1`-th is Long.
+    pub fn break_number(&self) -> i64 {
+        self.break_number
+    }
+
     /// A break is running: it has started and not yet finished.
     pub fn in_break(&self) -> bool {
         matches!(self.next, Event::FinishMiniBreak | Event::FinishLongBreak)

@@ -55,8 +55,8 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 | Item | Upstream | Port |
 | --- | --- | --- |
 | Settings | `electron-store` JSON, 80+ keys, defaults in `defaultSettings.js` | Same JSON schema and key names; atomic write (temp file + rename); import from `%APPDATA%\Stretchly\config.json` |
-| Break ideas | 146 + 206 lines of defaults, user ideas, sanitised | Same data, same sanitising rules |
-| Translations | i18next JSON, 52 locales | Reuse JSON files; backend needs only tray/notification strings |
+| Break ideas | Built-in ideas from the locale files, or the user's ideas when `useIdeasFromSettings` is on; no repeat until all came once | Same (`ideas` crate). Sanitising stays with the break window, where the HTML is shown |
+| Translations | i18next JSON, 54 locale files | Same files, built into the exe (`i18n` crate). Tray menu, tooltip and notifications use them; the language is read at start |
 | Custom sounds/images | user data `audio/`, `images/` folders, filename rules | Same folder rules |
 
 ## 5. CLI (`commands.js`)

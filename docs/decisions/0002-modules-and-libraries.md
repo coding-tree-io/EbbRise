@@ -24,8 +24,8 @@ Rust has no Spring-style application framework, and the port does not need one. 
 | `settings` | Settings schema, defaults, load/save, Stretchly import | — |
 | `breaks` | Breaks planner, break rules, until-morning | `settings` |
 | `commands` | CLI grammar, duration parser, help text | — |
-| `i18n` (later) | Locale files, time-remaining text | — |
-| `ideas` (later) | Break ideas, sanitising | — |
+| `i18n` | Stretchly's locale files (built in), lookup with English fallback, plurals, durations | — |
+| `ideas` | Built-in and custom break ideas, picked without repeats | `settings`, `i18n` |
 | `platform` | Windows adapters, one internal module per OS signal | no domain crate |
 | `ui` (later) | Slint UI host | domain crates, not `platform` |
 | `app` | Composition root: message loop, wiring, logging | all |
@@ -58,7 +58,9 @@ Versions are pinned at scaffold time.
 | Logs | `tracing`, `tracing-subscriber` (fmt only) | `main.log` plus `main.old.log` past 1 MB, as electron-log; `tracing-appender` rolls by time only, so a few lines of std do the size check |
 | Errors | `thiserror` (modules), `anyhow` (`app`) | |
 | Time | `jiff`, `sunrise` (+ `chrono`, required by `sunrise`) | |
-| Localized time-remaining text | ICU4X `DurationFormatter` (`icu_experimental`) | CLDR plural rules for all locales; API may still change |
+| Translations | Stretchly's i18next JSON files, read by a small `i18n` crate; plurals from ICU4X `icu_plurals` | No Rust crate reads i18next JSON (`rust-i18n` and Fluent use their own formats). The backend needs only lookup, English fallback, `{{name}}`, `_one`/`_other` keys and `$t()` nesting |
+| Localized durations | Locale keys `utils.hours` and `utils.minutes`, rounded to the minute | Upstream uses humanize-duration; no Rust crate covers its 52 languages, and the locale files already hold the words. Durations past a day show in hours |
+| Random idea order | `fastrand` | Small, seedable, so tests are repeatable |
 | Version check | `ureq` on a short-lived thread | Blocking HTTP, no tokio |
 | Module graph test | `cargo_metadata` (dev-dependency) | |
 | UI | `slint` | ADR 0001 |

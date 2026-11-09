@@ -44,7 +44,8 @@ Rules the port changes (upstream polls every 2 s; the port reacts to events):
 | naturalBreaksManager.js | covered by Tier A | |
 | displayManager.js | target display choice (primary, cursor, index, invalid index fallback), centred placement | Break windows on the wrong screen are a visible bug |
 | audioResolver.js, imageResolver.js | allowed file name rule (rejects path traversal) | Trust boundary |
-| translations.js | every locale file parses and has the keys the backend uses | Broken file breaks the tray |
+| translations.js | every locale file parses, its nested texts resolve, and the backend keys exist | Broken file breaks the tray |
+| shuffled.js | every enabled idea comes once before any repeats | Users notice repeats |
 | appIcon.js | one table: tray icon for minutes left, including > 99 minutes | CHANGELOG regression; the other 96 cases are a file-name mapping |
 
 ## Dropped
@@ -55,7 +56,7 @@ Rules the port changes (upstream polls every 2 s; the port reacts to events):
 | scheduler.js | Covered by Tier A |
 | breakShortcuts.js | Shortcut actions call the same planner commands as Tier A |
 | pauseMenu.js | Menu model; belongs to the UI |
-| runOnce.js, shuffled.js, ideasLoader.js | Trivial JS helpers |
+| runOnce.js, ideasLoader.js | Trivial JS helpers |
 | versionChecker.js | Network call; one manual check is enough |
 | utils.js Linux/X11/Flatpak/Snap/Store helpers, `shouldShowNotificationTitle` | Not Windows, or OS-version cosmetics |
 | dndManager.js Linux/macOS cases | Not Windows |

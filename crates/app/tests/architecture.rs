@@ -55,6 +55,8 @@ fn domain_dependencies_follow_module_boundaries() {
         ("settings", &[]),
         ("breaks", &["settings"]),
         ("commands", &[]),
+        ("i18n", &[]),
+        ("ideas", &["settings", "i18n"]),
         ("platform", &["windows"]),
     ];
 

@@ -146,27 +146,3 @@ fn target_display_and_centered_placement() {
         }
     );
 }
-
-#[test]
-fn locale_files_parse_and_supply_backend_keys_with_english_fallback() {
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("locales");
-    let english = std::fs::read_to_string(directory.join("en.json")).unwrap();
-    let mut count = 0;
-    for file in std::fs::read_dir(directory).unwrap() {
-        let file = file.unwrap();
-        if file
-            .path()
-            .extension()
-            .is_some_and(|extension| extension == "json")
-        {
-            let content = std::fs::read_to_string(file.path()).unwrap();
-            assert!(
-                breaks::locale_has_backend_keys(&content, &english),
-                "{}",
-                file.path().display()
-            );
-            count += 1;
-        }
-    }
-    assert!(count > 1);
-}

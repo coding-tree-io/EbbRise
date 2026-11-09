@@ -1,0 +1,12 @@
+[package]
+name = "ideas"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+settings = { path = "../settings" }
+i18n = { path = "../i18n" }
+fastrand = "=2.5.0"
+
+[lints]
+workspace = true

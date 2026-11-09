@@ -2,8 +2,12 @@
 //! toasts and the next wake-up come out. `main.rs` only connects this to the OS.
 
 mod command;
+mod status;
 
-use breaks::{BreaksPlanner, Event, format_time_remaining};
+use breaks::{BreaksPlanner, Event};
+use fastrand::Rng;
+use i18n::Translator;
+use ideas::{BreakIdea, Ideas};
 use platform::Signal;
 use settings::Settings;
 
@@ -76,13 +80,6 @@ pub trait Environment {
     fn until_morning(&self, settings: &Settings) -> Option<i64>;
 }
 
-/// The words a break shows: a Mini break shows only `text`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct BreakIdea {
-    title: String,
-    text: String,
-}
-
 /// The kind and words of the last break, for the `last` command.
 #[derive(Clone, Debug)]
 struct LastBreak {
@@ -92,6 +89,8 @@ struct LastBreak {
 
 pub struct Core {
     planner: BreaksPlanner,
+    words: Translator,
+    ideas: Ideas,
     exclusion_checked_at: i64,
     /// Words that a `mini` or `long` command set for the next break (upstream `nextIdea`).
     next_idea: Option<command::IdeaOverride>,
@@ -101,10 +100,14 @@ pub struct Core {
 impl Core {
     /// `focus_assist` is the value at start, `None` when Windows cannot report it.
     pub fn new(settings: Settings, now: i64, focus_assist: Option<i32>) -> Self {
+        let words = Translator::new(&settings.language);
+        let ideas = Ideas::load(&settings, &words, Rng::new());
         let mut planner = BreaksPlanner::new(settings, now);
         planner.focus_assist(now, focus_assist.unwrap_or(FOCUS_ASSIST_UNSUPPORTED));
         Self {
             planner,
+            words,
+            ideas,
             exclusion_checked_at: now,
             next_idea: None,
             last_break: None,
@@ -113,6 +116,11 @@ impl Core {
 
     pub fn settings(&self) -> &Settings {
         self.planner.settings()
+    }
+
+    /// The texts in the user's language.
+    pub fn words(&self) -> &Translator {
+        &self.words
     }
 
     /// `now` is awake time and `idle` is time since the last input, both in ms.
@@ -188,28 +196,20 @@ impl Core {
             event => event,
         };
         let idea = match event {
-            Event::StartMiniBreak => self.take_idea(false, now),
-            Event::StartLongBreak => self.take_idea(true, now),
+            Event::StartMiniBreak => self.take_idea(false),
+            Event::StartLongBreak => self.take_idea(true),
             _ => BreakIdea::default(),
         };
-        toast(self.settings(), &event, idea)
+        toast(&self.words, self.settings(), &event, idea)
     }
 
-    /// The words for a starting break: the `mini` or `long` command's words, else an enabled idea.
-    fn take_idea(&mut self, long: bool, now: i64) -> BreakIdea {
-        let settings = self.settings();
+    /// The words for a starting break: the `mini` or `long` command's words, else the next idea.
+    fn take_idea(&mut self, long: bool) -> BreakIdea {
         let picked = if long {
-            pick(&settings.long_break_ideas, now).map(|idea| BreakIdea {
-                title: idea.data.first().cloned().unwrap_or_default(),
-                text: idea.data.get(1).cloned().unwrap_or_default(),
-            })
+            self.ideas.next_long()
         } else {
-            pick(&settings.mini_break_ideas, now).map(|idea| BreakIdea {
-                title: String::new(),
-                text: idea.data.clone(),
-            })
+            self.ideas.next_mini()
         };
-        let picked = picked.unwrap_or_default();
         let idea = match self.next_idea.take() {
             Some(words) => BreakIdea {
                 title: words.title.unwrap_or(picked.title),
@@ -275,72 +275,56 @@ impl Core {
 
     /// Tray tooltip and whether to show the paused icon.
     pub fn tray(&self, now: i64) -> (String, bool) {
-        let paused = self.planner.paused();
-        let text = if paused {
-            match self.planner.deadline() {
-                Some(deadline) => format!("Paused, resumes in {}", duration(deadline - now)),
-                None => "Paused".into(),
-            }
-        } else if self.planner.in_break() {
-            "Break in progress".into()
+        let header = self.words.text("main.toolTipHeader");
+        let message = status::tray_message(&self.planner, &self.words, now);
+        let text = if message.is_empty() {
+            header
         } else {
-            match self.planner.time_to_next_break(now) {
-                Some(remaining) => format!("Next break in {}", duration(remaining)),
-                None => "Waiting (Do Not Disturb or away)".into(),
-            }
+            format!(
+                "{header}
+
+{message}"
+            )
         };
-        (text, paused)
+        (text, self.planner.paused())
     }
 }
 
-fn toast(s: &Settings, event: &Event, idea: BreakIdea) -> Option<Toast> {
+/// Upstream shows only the notifications and `resumingBreaks`; the break toasts stand in
+/// for the break window until it exists.
+fn toast(words: &Translator, s: &Settings, event: &Event, idea: BreakIdea) -> Option<Toast> {
+    let seconds = |interval: i64| (interval / 1000).to_string();
     let (title, text) = match event {
         Event::MiniBreakNotification => (
-            "Mini break soon".into(),
-            format!(
-                "Mini break in {}",
-                duration(s.mini_break_notification_interval)
+            words.with(
+                "main.miniBreakIn",
+                &[("seconds", &seconds(s.mini_break_notification_interval))],
             ),
+            String::new(),
         ),
         Event::LongBreakNotification => (
-            "Long break soon".into(),
-            format!(
-                "Long break in {}",
-                duration(s.long_break_notification_interval)
+            words.with(
+                "main.longBreakIn",
+                &[("seconds", &seconds(s.long_break_notification_interval))],
             ),
+            String::new(),
         ),
-        Event::StartMiniBreak => (
-            format!("Mini break: {}", duration(s.mini_break_duration)),
-            idea.text,
-        ),
+        Event::StartMiniBreak => (words.text("main.toMiniBreak"), idea.text),
         Event::StartLongBreak => (
-            format!("Long break: {}", duration(s.long_break_duration)),
+            words.text("main.toLongBreak"),
             [idea.title, idea.text]
                 .into_iter()
                 .filter(|part| !part.is_empty())
                 .collect::<Vec<_>>()
                 .join(": "),
         ),
-        Event::FinishMiniBreak | Event::FinishLongBreak => {
-            ("Break over".into(), "Back to work.".into())
-        }
-        Event::AwaitMiniBreakFinish | Event::AwaitLongBreakFinish | Event::ResumeBreaks => {
-            return None;
-        }
+        Event::ResumeBreaks => (words.text("main.resumingBreaks"), String::new()),
+        Event::FinishMiniBreak
+        | Event::FinishLongBreak
+        | Event::AwaitMiniBreakFinish
+        | Event::AwaitLongBreakFinish => return None,
     };
     Some(Toast { title, text })
-}
-
-/// "9 minutes 58 seconds" from the shared time-remaining text.
-fn duration(milliseconds: i64) -> String {
-    let text = format_time_remaining(milliseconds);
-    text.strip_suffix(" remaining").unwrap_or(&text).to_owned()
-}
-
-/// Picks an enabled idea; the clock is random enough for this.
-fn pick<T>(ideas: &[settings::Idea<T>], now: i64) -> Option<&settings::Idea<T>> {
-    let enabled: Vec<_> = ideas.iter().filter(|idea| idea.enabled).collect();
-    (!enabled.is_empty()).then(|| enabled[now as usize % enabled.len()])
 }
 
 #[cfg(test)]
@@ -445,6 +429,18 @@ mod tests {
         }
     }
 
+    /// The tooltip without its header line.
+    fn status(core: &Core, now: i64) -> String {
+        let (text, _) = core.tray(now);
+        text.split_once(
+            "
+
+",
+        )
+        .map(|(_, message)| message.to_owned())
+        .unwrap_or_default()
+    }
+
     fn log(entries: &[(i64, &str)]) -> Vec<(i64, String)> {
         entries
             .iter()
@@ -455,19 +451,21 @@ mod tests {
     #[test]
     fn full_cycle_follows_upstream_timings() {
         let mut sim = Sim::new("");
+        assert_eq!(
+            status(&sim.core, 0),
+            "Next Mini break in about 1 minute
+Next Long break after 2 Mini breaks"
+        );
         sim.run_until(130_000);
         assert_eq!(
             sim.take_log(),
             log(&[
-                (20_000, "Mini break soon"),
-                (30_000, "Mini break: 10 seconds"),
-                (40_000, "Break over"),
-                (60_000, "Mini break soon"),
-                (70_000, "Mini break: 10 seconds"),
-                (80_000, "Break over"),
-                (100_000, "Long break soon"),
-                (110_000, "Long break: 15 seconds"),
-                (125_000, "Break over"),
+                (20_000, "Mini break in 10 seconds"),
+                (30_000, "Mini break"),
+                (60_000, "Mini break in 10 seconds"),
+                (70_000, "Mini break"),
+                (100_000, "Long break in 10 seconds"),
+                (110_000, "Long break"),
             ])
         );
         // One wake-up per step: no polling while the user works.
@@ -485,13 +483,16 @@ mod tests {
         sim.run_until(5_000);
         sim.core.on_menu(MenuAction::PauseHour, sim.now, &sim.os);
         assert_eq!(
-            sim.core.tray(sim.now),
-            ("Paused, resumes in 1 hour".into(), true)
+            status(&sim.core, sim.now),
+            "Paused - Resuming in about 1 hour"
         );
         sim.run_until(5_000 + HOUR_MS + 25_000);
         assert_eq!(
             sim.take_log(),
-            log(&[(5_000 + HOUR_MS + 20_000, "Mini break soon")])
+            log(&[
+                (5_000 + HOUR_MS, "Resuming breaks"),
+                (5_000 + HOUR_MS + 20_000, "Mini break in 10 seconds")
+            ])
         );
         // Only the 5-minute idle checks woke the app during the hour.
         assert!(sim.wakes <= 14, "{} wake-ups", sim.wakes);
@@ -507,7 +508,7 @@ mod tests {
         sim.os.morning = None;
         sim.core
             .on_menu(MenuAction::PauseUntilMorning, sim.now, &sim.os);
-        assert_eq!(sim.core.tray(sim.now), ("Paused".into(), true));
+        assert_eq!(status(&sim.core, sim.now), "Paused Indefinitely");
         sim.core.on_menu(MenuAction::Resume, sim.now, &sim.os);
         assert!(!sim.core.tray(sim.now).1);
     }
@@ -518,13 +519,13 @@ mod tests {
         sim.away_since = Some(0);
         sim.run_until(400_000);
         assert_eq!(sim.take_log(), log(&[]));
-        assert_eq!(sim.core.tray(sim.now).0, "Waiting (Do Not Disturb or away)");
+        assert_eq!(status(&sim.core, sim.now), "", "nothing planned while away");
 
         sim.away_since = None;
         sim.run_until(400_000 + AWAY_CHECK_MS + 600_000);
         let log = sim.take_log();
         let (at, title) = &log[0];
-        assert_eq!(title, "Mini break soon");
+        assert_eq!(title, "Mini break in 10 seconds");
         let at = *at;
         // The return is seen at the next away check, at most 2 s late.
         assert!(
@@ -542,7 +543,10 @@ mod tests {
         assert_eq!(sim.take_log(), log(&[]));
         sim.signal(Signal::Unlock);
         sim.run_until(125_000);
-        assert_eq!(sim.take_log(), log(&[(120_000, "Mini break soon")]));
+        assert_eq!(
+            sim.take_log(),
+            log(&[(120_000, "Mini break in 10 seconds")])
+        );
     }
 
     #[test]
@@ -553,7 +557,7 @@ mod tests {
         sim.signal(Signal::Suspend);
         sim.signal(Signal::Resume);
         sim.run_until(25_000);
-        assert_eq!(sim.take_log(), log(&[(20_000, "Mini break soon")]));
+        assert_eq!(sim.take_log(), log(&[(20_000, "Mini break in 10 seconds")]));
     }
 
     #[test]
@@ -564,7 +568,7 @@ mod tests {
         assert_eq!(sim.take_log(), log(&[]));
         sim.signal(Signal::FocusAssist(0));
         sim.run_until(75_000);
-        assert_eq!(sim.take_log(), log(&[(70_000, "Mini break soon")]));
+        assert_eq!(sim.take_log(), log(&[(70_000, "Mini break in 10 seconds")]));
     }
 
     #[test]
@@ -578,7 +582,7 @@ mod tests {
         sim.os.running = Some(Vec::new());
         sim.run_until(80_000);
         // The next 2 s check, at 52 s, sees the app gone and restarts the cycle.
-        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
+        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break in 10 seconds")]));
         assert_eq!(sim.os.process_reads.get(), 40);
     }
 
@@ -612,18 +616,18 @@ mod tests {
 
         sim.os.running = Some(vec!["focus-timer.exe".into()]);
         sim.run_until(75_000);
-        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break soon")]));
+        assert_eq!(sim.take_log(), log(&[(72_000, "Mini break in 10 seconds")]));
     }
 
     #[test]
     fn pause_resume_and_toggle_commands() {
         let mut sim = Sim::new("");
         sim.command(&["pause", "-d", "1h"]);
-        assert_eq!(sim.core.tray(0), ("Paused, resumes in 1 hour".into(), true));
+        assert_eq!(status(&sim.core, 0), "Paused - Resuming in about 1 hour");
         sim.command(&["resume"]);
         assert!(!sim.core.tray(0).1);
         sim.command(&["toggle"]);
-        assert_eq!(sim.core.tray(0), ("Paused".into(), true));
+        assert_eq!(status(&sim.core, 0), "Paused Indefinitely");
         sim.command(&["toggle"]);
         assert!(!sim.core.tray(0).1);
 
@@ -633,10 +637,7 @@ mod tests {
 
         sim.os.morning = Some(60_000);
         sim.command(&["pause", "-d", "until-morning"]);
-        assert_eq!(
-            sim.core.tray(0),
-            ("Paused, resumes in 1 minute".into(), true)
-        );
+        assert_eq!(status(&sim.core, 0), "Paused - Resuming in about 1 minute");
     }
 
     #[test]
@@ -645,7 +646,7 @@ mod tests {
         sim.run_until(5_000);
         sim.command(&["long", "-w", "1", "-T", "Stretch up!", "-t", "Go stretch!"]);
         sim.run_until(70_000);
-        assert_eq!(sim.take_log(), log(&[(65_000, "Long break: 15 seconds")]));
+        assert_eq!(sim.take_log(), log(&[(65_000, "Long break")]));
         assert_eq!(sim.last_text, "Stretch up!: Go stretch!");
     }
 
@@ -660,29 +661,26 @@ mod tests {
         sim.run_until(45_000);
         assert_eq!(
             sim.take_log(),
-            log(&[
-                (20_000, "Mini break soon"),
-                (30_000, "Mini break: 10 seconds"),
-                (40_000, "Break over"),
-            ]),
+            log(&[(20_000, "Mini break in 10 seconds"), (30_000, "Mini break"),]),
             "no repeat while a break runs"
         );
         sim.command(&["last"]);
         sim.run_until(45_100);
-        assert_eq!(sim.take_log(), log(&[(45_100, "Mini break: 10 seconds")]));
+        assert_eq!(sim.take_log(), log(&[(45_100, "Mini break")]));
         assert_eq!(sim.last_text, "Look away");
     }
 
     #[test]
     fn manual_finish_ends_the_break_at_once_until_the_window_exists() {
         let mut sim = Sim::new(r#","miniBreakManualFinish":true"#);
-        sim.run_until(45_000);
+        sim.run_until(65_000);
         assert_eq!(
             sim.take_log(),
             log(&[
-                (20_000, "Mini break soon"),
-                (30_000, "Mini break: 10 seconds"),
-                (40_000, "Break over")
+                (20_000, "Mini break in 10 seconds"),
+                (30_000, "Mini break"),
+                // Finished at 40 s, so the next break is 30 s later.
+                (60_000, "Mini break in 10 seconds"),
             ])
         );
     }

@@ -11,6 +11,9 @@ path = "src/main.rs"
 settings = { path = "../settings" }
 breaks = { path = "../breaks" }
 commands = { path = "../commands" }
+i18n = { path = "../i18n" }
+ideas = { path = "../ideas" }
+fastrand = "=2.5.0"
 platform = { path = "../platform" }
 jiff = "=0.2.41"
 tray-icon = { version = "=0.26.1", default-features = false }
