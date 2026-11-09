@@ -23,7 +23,7 @@ Rust has no Spring-style application framework, and the port does not need one. 
 | --- | --- | --- |
 | `settings` | Settings schema, defaults, load/save, Stretchly import | — |
 | `breaks` | Breaks planner, break rules, until-morning | `settings` |
-| `commands` | CLI grammar, duration parser, pipe message format | — |
+| `commands` | CLI grammar, duration parser, help text | — |
 | `i18n` (later) | Locale files, time-remaining text | — |
 | `ideas` (later) | Break ideas, sanitising | — |
 | `platform` | Windows adapters, one internal module per OS signal | no domain crate |
@@ -52,7 +52,7 @@ Versions are pinned at scaffold time.
 | Tray icon + menu | `tray-icon`, `muda` | Icon re-add after Explorer restart, high-DPI icons, native menus |
 | Global shortcuts | `global-hotkey` | `RegisterHotKey` and shortcut parsing; convert Stretchly's `CmdOrCtrl+X` format |
 | Toasts | `tauri-winrt-notification` | Toast XML; AppUserModelID registration (R2) stays ours |
-| Single instance + CLI forwarding | `interprocess` | Named pipe; a failed pipe create means another instance runs |
+| Single instance + CLI forwarding | none (Win32) | Named mutex finds the running app; the second process sends its arguments to the app's hidden window with WM_COPYDATA. No crate, no pipe thread, and the command runs on the UI thread like every other signal |
 | Autostart | `auto-launch` | `HKCU\...\Run` |
 | Paths, atomic save | std only: `%APPDATA%`, `fs::rename` over a synced temporary file | Save never leaves a half-written file; no crate needed for a few lines |
 | Logs | `tracing`, `tracing-subscriber`, `tracing-appender` | Rolling log file |

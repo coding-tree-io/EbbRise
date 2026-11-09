@@ -10,6 +10,6 @@ mod signals;
 pub mod toast;
 
 pub use clock::{awake_ms, idle_ms};
-pub use instance::is_first_instance;
+pub use instance::{attach_parent_console, is_first_instance};
 pub use processes::running_process_names;
-pub use signals::{Signal, SignalWindow, quit, run_message_loop};
+pub use signals::{Signal, SignalWindow, quit, run_message_loop, running_app_window, send_command};

@@ -166,27 +166,32 @@ impl BreaksPlanner {
         true
     }
 
-    /// Starts a Mini break shortly; the Mini/Long order then continues from it.
-    pub fn skip_to_mini(&mut self, now: i64) {
+    /// Starts a Mini break after `delay` ms, or shortly when `None`; the Mini/Long order then
+    /// continues from it.
+    pub fn skip_to_mini(&mut self, now: i64, delay: Option<i64>) {
         if self.settings.mini_break
             && self.settings.long_break
             && self.break_number % (self.settings.long_break_interval + 1) == 0
         {
             self.break_number = 1;
         }
-        self.next = Event::StartMiniBreak;
-        self.deadline = Some(now + SKIP_DELAY_MS);
-        self.delay = SKIP_DELAY_MS;
+        self.skip_to(Event::StartMiniBreak, now, delay);
     }
 
-    /// Starts a Long break shortly; the Mini/Long order then continues from it.
-    pub fn skip_to_long(&mut self, now: i64) {
+    /// Starts a Long break after `delay` ms, or shortly when `None`; the Mini/Long order then
+    /// continues from it.
+    pub fn skip_to_long(&mut self, now: i64, delay: Option<i64>) {
         if self.settings.mini_break && self.settings.long_break {
             self.break_number = self.settings.long_break_interval + 1;
         }
-        self.next = Event::StartLongBreak;
-        self.deadline = Some(now + SKIP_DELAY_MS);
-        self.delay = SKIP_DELAY_MS;
+        self.skip_to(Event::StartLongBreak, now, delay);
+    }
+
+    fn skip_to(&mut self, start: Event, now: i64, delay: Option<i64>) {
+        let delay = delay.unwrap_or(SKIP_DELAY_MS);
+        self.next = start;
+        self.deadline = Some(now + delay);
+        self.delay = delay;
     }
 
     /// Pauses breaks for `duration` ms, or until [`Self::resume`] with [`Self::INDEFINITELY`].

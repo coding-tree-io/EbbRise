@@ -141,3 +141,19 @@ fn running_processes_include_this_test() {
             .any(|name| name == "explorer.exe" || name == "csrss.exe")
     );
 }
+
+#[test]
+fn command_from_another_instance_arrives_as_a_signal() {
+    let (signals, received) = signal_window();
+    let args: Vec<String> = ["long", "-T", "Stretch up!", "-t", "Ωμέγα"]
+        .map(String::from)
+        .into();
+    assert!(platform::send_command(signals.window(), &args));
+    assert!(platform::send_command(signals.window(), &[]));
+    pump(Duration::from_millis(20));
+    let received: Vec<Signal> = received.take().into_iter().map(|(s, _)| s).collect();
+    assert_eq!(
+        received,
+        [Signal::Command(args), Signal::Command(Vec::new())]
+    );
+}

@@ -45,7 +45,7 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 | Sounds (WAV, volume 0–1) | `new Audio()` in a hidden renderer window | PCM WAV scaled by volume in memory, then `PlaySoundW(SND_MEMORY \| SND_ASYNC)`; no audio crate (ADR 0001) |
 | Global shortcuts (8 configurable, plus end-break) | `globalShortcut` | `RegisterHotKey` |
 | Autostart | `app.setLoginItemSettings`; Store build uses StartupTask | `HKCU\...\Run` value; MSIX `StartupTask` if we ship MSIX |
-| Single instance + CLI commands | `requestSingleInstanceLock`, `second-instance` argv | Named mutex + named pipe that carries the command |
+| Single instance + CLI commands | `requestSingleInstanceLock`, `second-instance` argv | Named mutex + WM_COPYDATA to the hidden signal window |
 | Break windows on all/primary/cursor display, top-most, not focusable, kiosk/fullscreen | `BrowserWindow` per display | Window placement and z-order rules belong to the core/UI contract; drawing belongs to the UI host |
 | Logs | `electron-log` | `tracing` to a rolling file |
 | Open URL / folder | `shell.openExternal` | `ShellExecuteW` |
@@ -61,7 +61,7 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 
 ## 5. CLI (`commands.js`)
 
-Commands: `help`, `version`, `logs`, `reset`, `pause [-d indefinitely|until-morning|HHhMMm]`, `resume`, `toggle`, `postpone`, `mini [-T title] [-n] [-w wait]`, `long [-T] [-t text] [-n] [-w]`, `preferences`, and others. Duration parser `HHhMMm|HHh|MMm|MM`. Port: same grammar, sent to the running instance over the named pipe.
+Commands: `help`, `version`, `logs`, `reset`, `pause [-d indefinitely|until-morning|HHhMMm]`, `resume`, `toggle`, `postpone`, `mini [-T title] [-n] [-w wait]`, `long [-T] [-t text] [-n] [-w]`, `preferences`, and others. Duration parser `HHhMMm|HHh|MMm|MM`. Port: same grammar, sent to the running instance with WM_COPYDATA.
 
 ## 6. Out of scope until decided
 

@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 settings = { path = "../settings" }
 breaks = { path = "../breaks" }
+commands = { path = "../commands" }
 platform = { path = "../platform" }
 jiff = "=0.2.41"
 tray-icon = { version = "=0.26.1", default-features = false }

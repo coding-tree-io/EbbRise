@@ -2,4 +2,4 @@
 
 mod commands;
 
-pub use commands::{Command, parse_duration};
+pub use commands::{Command, HELP, parse_duration};

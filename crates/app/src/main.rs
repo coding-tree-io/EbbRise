@@ -8,14 +8,33 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use breaks::until_morning;
-use platform::{Signal, SignalWindow, awake_ms, idle_ms, running_process_names, toast};
+use commands::Command;
+use platform::{Signal, SignalWindow, awake_ms, idle_ms, toast};
 use settings::Settings;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
-use crate::logic::{Core, MenuAction};
+use crate::logic::{Core, Environment, MenuAction};
 
 const APP_ID: &str = "StretchCore";
+
+/// The real OS behind [`Environment`].
+struct Windows;
+
+impl Environment for Windows {
+    fn running_processes(&self) -> Vec<String> {
+        platform::running_process_names()
+    }
+
+    fn until_morning(&self, settings: &Settings) -> Option<i64> {
+        until_morning(
+            &jiff::Zoned::now(),
+            &settings.morning_hour,
+            settings.pos_latitude,
+            settings.pos_longitude,
+        )
+    }
+}
 
 struct App {
     core: Core,
@@ -37,7 +56,8 @@ fn with_app(action: impl FnOnce(&mut App)) {
 
 fn main() {
     if !platform::is_first_instance(r"Local\StretchCore") {
-        return;
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        return run_second_instance(&args);
     }
     let settings = load_settings();
     if let Err(error) = toast::register(APP_ID, "Stretch") {
@@ -77,10 +97,7 @@ fn main() {
 
 impl App {
     fn on_signal(&mut self, signal: Signal) {
-        for toast in self
-            .core
-            .on_signal(signal, awake_ms(), idle_ms(), running_process_names)
-        {
+        for toast in self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows) {
             toast::show(
                 APP_ID,
                 &toast.title,
@@ -95,14 +112,7 @@ impl App {
         if action == MenuAction::Quit {
             return platform::quit();
         }
-        self.core.on_menu(action, awake_ms(), |settings| {
-            until_morning(
-                &jiff::Zoned::now(),
-                &settings.morning_hour,
-                settings.pos_latitude,
-                settings.pos_longitude,
-            )
-        });
+        self.core.on_menu(action, awake_ms(), &Windows);
         self.rearm_timer_and_refresh_tray();
     }
 
@@ -118,6 +128,28 @@ impl App {
         let (text, paused) = self.core.tray(awake_ms());
         let _ = self.tray.set_tooltip(Some(text));
         let _ = self.tray.set_icon(Some(tray_icon(paused)));
+    }
+}
+
+/// Answers `help`, `version` and `logs` here and passes every other command to the running app.
+fn run_second_instance(args: &[String]) {
+    platform::attach_parent_console();
+    let words: Vec<&str> = args.iter().map(String::as_str).collect();
+    let Some(command) = Command::parse(&words) else {
+        return eprintln!("command '{}' is not supported", words.join(" "));
+    };
+    match command.name.as_str() {
+        "help" => println!("{}", commands::HELP),
+        "version" => println!("Stretch version {}", env!("CARGO_PKG_VERSION")),
+        // shortcut: no log file until `tracing` lands; print its path then.
+        "logs" => println!("Stretch keeps no log file yet."),
+        _ => {
+            let taken = platform::running_app_window()
+                .is_some_and(|window| platform::send_command(window, args));
+            if !taken {
+                eprintln!("the running Stretch app did not take the command");
+            }
+        }
     }
 }
 

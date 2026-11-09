@@ -107,13 +107,13 @@ fn skip_to_break_preserves_following_order() {
         ..Settings::default()
     };
     let mut planner = BreaksPlanner::new(settings, 0);
-    planner.skip_to_long(0);
+    planner.skip_to_long(0, None);
     assert!(planner.advance(99).is_empty());
     assert_eq!(planner.advance(100), vec![Event::StartLongBreak]);
     planner.advance(110);
     assert_eq!(planner.advance(210), vec![Event::StartMiniBreak]);
     planner.advance(220);
-    planner.skip_to_mini(220);
+    planner.skip_to_mini(220, None);
     assert_eq!(planner.advance(320), vec![Event::StartMiniBreak]);
     planner.advance(330);
     assert_eq!(planner.advance(430), vec![Event::StartLongBreak]);
@@ -291,7 +291,7 @@ fn pause_exclusion_finishes_break_and_resumes_when_removed() {
     assert_eq!(planner.advance(400), vec![Event::StartMiniBreak]);
     // An exclusion that ends during a break leaves the break running (upstream guard).
     planner.processes_changed(410, &["meeting.exe"]);
-    planner.skip_to_mini(410);
+    planner.skip_to_mini(410, None);
     assert_eq!(planner.advance(510), vec![Event::StartMiniBreak]);
     planner.processes_changed(520, &[]);
     assert_eq!(planner.advance(560), vec![Event::FinishMiniBreak]);

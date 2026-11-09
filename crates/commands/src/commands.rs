@@ -1,3 +1,45 @@
+/// Usage text for `stretch help`, with upstream's commands, options and examples.
+pub const HELP: &str = "\
+Usage: stretch <command> [options]
+
+Commands:
+	stretch help                  Show this help message
+	stretch version               Show current Stretch version
+	stretch logs                  Show location of logs file
+	stretch reset                 Reset breaks
+	stretch pause [options]       Pause breaks
+	stretch resume                Resume from a pause
+	stretch toggle                Pause/unpause breaks
+	stretch postpone              Postpone the currently running break, when allowed
+	stretch skip                  Skip the currently running break, when allowed
+	stretch finish                Finish the currently running break, when allowed
+	stretch mini [options]        Skip to the Mini break, customize it
+	stretch long [options]        Skip to the Long break, customize it
+	stretch last                  Start the last Mini or Long break again
+	stretch preferences           Open Preferences window
+
+Options:
+	-T, --title    Specify title for next break (Long or Mini)
+	-t, --text     Specify text for next break (Long break only)
+	-n, --noskip   Do not skip directly to this break (Long or Mini)
+	-w, --wait     Specify an interval to wait before skipping to this break (Long or Mini) [HHhMMm|HHh|MMm|MM]
+	-d, --duration Specify duration for pausing breaks (Pause only) [indefinitely|until-morning|HHhMMm|HHh|MMm|MM]
+
+Examples:
+	stretch pause                                    Pause breaks indefinitely
+	stretch pause -d 60                              Pause breaks for one hour
+	stretch pause -d 1h                              Pause breaks for one hour
+	stretch pause -d 1h20m                           Pause breaks for one hour and twenty minutes
+	stretch postpone                                 Postpone the currently running break using existing preferences
+	stretch skip                                     Skip the currently running break using existing preferences
+	stretch finish                                   Finish the break after its countdown in Manual Finish mode
+	stretch mini -T \"Stretch up!\"                    Start a Mini break, with the title \"Stretch up!\"
+	stretch long -T \"Stretch up!\" --noskip           Set the next break's title to \"Stretch up!\"
+	stretch long -T \"Stretch up!\" -t \"Go stretch!\"   Start a long break, with the title \"Stretch up!\" and text \"Go stretch!\"
+	stretch long -w 20m -T \"Stretch up!\"             Wait 20 minutes, then start a long break with the title set to \"Stretch up!\"
+	stretch last                                     Start the last break again, with the same idea
+	stretch preferences                              Open Preferences window";
+
 /// A parsed command line; options that the command does not take are ignored, as upstream.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Command {
