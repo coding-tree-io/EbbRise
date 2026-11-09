@@ -215,6 +215,9 @@ pub struct Settings {
     /// Upstream one-time autostart migration is done.
     #[serde(rename = "_migratedOpenAtLogin")]
     pub migrated_open_at_login: bool,
+    /// Keys this version does not know, such as ones from a newer version; saved back as they are.
+    #[serde(flatten)]
+    pub unknown_keys: serde_json::Map<String, serde_json::Value>,
 }
 
 const DEFAULTS: &str = include_str!("default-settings.json");

@@ -149,17 +149,10 @@ fn load_settings() -> Settings {
     let Some(app_data) = std::env::var_os("APPDATA").map(PathBuf::from) else {
         return Settings::default();
     };
-    for path in [
-        app_data.join("stretch-core").join("config.json"),
-        app_data.join("Stretchly").join("config.json"),
-    ] {
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        match Settings::from_json(&text) {
-            Ok(settings) => return settings,
-            Err(error) => eprintln!("ignoring {}: {error}", path.display()),
-        }
-    }
-    Settings::default()
+    let own = app_data.join("stretch-core").join("config.json");
+    let stretchly = app_data.join("Stretchly").join("config.json");
+    Settings::load_or_import(&own, &stretchly).unwrap_or_else(|error| {
+        eprintln!("using defaults, {}: {error}", own.display());
+        Settings::default()
+    })
 }

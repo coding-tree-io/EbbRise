@@ -54,7 +54,7 @@ Versions are pinned at scaffold time.
 | Toasts | `tauri-winrt-notification` | Toast XML; AppUserModelID registration (R2) stays ours |
 | Single instance + CLI forwarding | `interprocess` | Named pipe; a failed pipe create means another instance runs |
 | Autostart | `auto-launch` | `HKCU\...\Run` |
-| Paths, atomic save | `directories`, `tempfile` (`persist`) | `%APPDATA%`; save never leaves a half-written file |
+| Paths, atomic save | std only: `%APPDATA%`, `fs::rename` over a synced temporary file | Save never leaves a half-written file; no crate needed for a few lines |
 | Logs | `tracing`, `tracing-subscriber`, `tracing-appender` | Rolling log file |
 | Errors | `thiserror` (modules), `anyhow` (`app`) | |
 | Time | `jiff`, `sunrise` (+ `chrono`, required by `sunrise`) | |
