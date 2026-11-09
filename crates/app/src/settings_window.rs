@@ -13,7 +13,7 @@ use crate::logic::{BreakForm, SettingsForm};
 use crate::ui::{Palette, SettingsWindow};
 use crate::{App, app_folder, log_path, sync_autostart, with_app};
 
-const TITLE: &str = "Ebb settings";
+const TITLE: &str = "EbbRise settings";
 /// The window's ground colour in dark and light mode, for its title bar.
 const GROUND: [u32; 2] = [0x16130E, 0xFAF6EE];
 
@@ -29,11 +29,12 @@ impl App {
             Err(error) => return warn!(%error, "settings window failed"),
         };
         window.set_version(env!("CARGO_PKG_VERSION").into());
+        crate::settings_words::translate(&window, self.core.words());
         let languages: Vec<SharedString> =
             LANGUAGES.iter().map(|(_, name)| (*name).into()).collect();
         window.set_languages(ModelRc::new(VecModel::from(languages)));
         // The short form fits the row; the full path is long and user-specific.
-        window.set_audio_folder(r"%APPDATA%\stretch-core\audio".into());
+        window.set_audio_folder(r"%APPDATA%\EbbRise\audio".into());
         window.on_changed(|| with_app(App::on_settings_changed));
         window.on_play(|slot| with_app(move |app| app.preview_sound(slot)));
         window.on_open_audio_folder(|| with_app(|app| open(app.audio_folder.as_deref())));
@@ -63,6 +64,14 @@ impl App {
         }
     }
 
+    fn reopen_settings(&mut self) {
+        if let Some(window) = self.settings_window.take() {
+            let _ = window.hide();
+            Timer::single_shot(Duration::ZERO, move || drop(window));
+        }
+        self.open_settings();
+    }
+
     /// Frees the window after this event, as the break window is.
     fn close_settings(&mut self) {
         if let Some(window) = self.settings_window.take() {
@@ -75,16 +84,12 @@ impl App {
         let Some(window) = &self.settings_window else {
             return;
         };
-        let files = self
-            .audio_folder
-            .as_deref()
-            .map(sound_files)
-            .unwrap_or_default();
+        let files = crate::sounds::names(self.audio_folder.as_deref());
         window
             .global::<Palette>()
             .set_theme(crate::ui::theme(self.core.settings()));
         let form = SettingsForm::new(self.core.settings(), &files);
-        set_form(window, &form);
+        set_form(window, &form, self.core.words());
         self.settings_sounds = form.sounds;
     }
 
@@ -103,6 +108,7 @@ impl App {
             return;
         }
         let login = changed.open_at_login != self.core.settings().open_at_login;
+        let language = changed.language != self.core.settings().language;
         if let Some(path) = app_folder().map(|folder| folder.join("config.json"))
             && let Err(error) = changed.save(&path)
         {
@@ -113,7 +119,12 @@ impl App {
         }
         info!("settings changed");
         self.core.set_settings(changed, platform::awake_ms());
-        self.fill_settings_window();
+        if language {
+            // The window's words are set when it opens, so it opens again in the new language.
+            self.reopen_settings();
+        } else {
+            self.fill_settings_window();
+        }
         self.rearm_timer_and_refresh_tray();
     }
 
@@ -139,13 +150,14 @@ impl App {
     }
 }
 
-fn set_form(window: &SettingsWindow, form: &SettingsForm) {
+fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translator) {
     window.set_fullscreen(form.fullscreen);
     window.set_ideas(form.ideas);
     window.set_natural_breaks(form.natural_breaks);
     window.set_open_at_login(form.open_at_login);
     window.set_monitor_dnd(form.monitor_dnd);
     window.set_language(form.language as i32);
+    window.set_theme(form.theme as i32);
     window.set_mini_on(form.mini.on);
     window.set_mini_every(form.mini.every as i32);
     window.set_mini_length(form.mini.length as i32);
@@ -156,7 +168,13 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm) {
     window.set_long_length(form.long.length as i32);
     window.set_long_notify(form.long.notify);
     window.set_long_strict(form.long.strict);
-    let labels: Vec<SharedString> = form.sound_labels().into_iter().map(Into::into).collect();
+    let labels: Vec<SharedString> = form
+        .sounds
+        .iter()
+        .zip(form.sound_labels())
+        .map(|(name, label)| crate::settings_words::sound_name(words, name).unwrap_or(label))
+        .map(Into::into)
+        .collect();
     window.set_sounds(ModelRc::from(Rc::new(VecModel::from(labels))));
     let [mini_start, mini_end, long_start, long_end] = form.sound_choice.map(|i| i as i32);
     window.set_mini_start(mini_start);
@@ -175,6 +193,7 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>) -> SettingsForm {
         open_at_login: window.get_open_at_login(),
         monitor_dnd: window.get_monitor_dnd(),
         language: index(window.get_language()).min(LANGUAGES.len() - 1),
+        theme: index(window.get_theme()),
         mini: BreakForm {
             on: window.get_mini_on(),
             every: i64::from(window.get_mini_every()),
@@ -206,20 +225,6 @@ fn colour_title_bar(dark: bool) {
     if !platform::title_bar(TITLE, dark, GROUND[usize::from(!dark)]) {
         warn!("settings title bar not coloured");
     }
-}
-
-/// The names of the WAV files in `folder` that the player accepts, sorted.
-fn sound_files(folder: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(folder) else {
-        return Vec::new();
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-        .filter_map(|file| file.strip_suffix(".wav").map(str::to_owned))
-        .filter(|name| crate::sound_file(folder, name).is_some())
-        .collect();
-    names.sort();
-    names
 }
 
 /// Opens a folder in Explorer.

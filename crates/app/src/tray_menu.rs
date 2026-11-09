@@ -35,12 +35,12 @@ fn menu_items(entries: &[MenuEntry]) -> Vec<Box<dyn IsMenuItem>> {
         .collect()
 }
 
-/// The Ebb tray icon at the system's small icon size, grey while breaks are paused.
+/// The EbbRise tray icon at the system's small icon size, grey while breaks are paused.
 pub(crate) fn tray_icon(paused: bool) -> Icon {
     let svg: &[u8] = if paused {
-        include_bytes!("../ui/icons/ebb-tray-paused.svg")
+        include_bytes!("../ui/icons/ebbrise-tray-paused.svg")
     } else {
-        include_bytes!("../ui/icons/ebb-tray.svg")
+        include_bytes!("../ui/icons/ebbrise-tray.svg")
     };
     let size = platform::small_icon_size();
     let tree = Tree::from_data(svg, &resvg::usvg::Options::default()).expect("bundled tray icon");

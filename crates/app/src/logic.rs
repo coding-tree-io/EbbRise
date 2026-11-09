@@ -251,7 +251,10 @@ impl Core {
             MenuAction::SkipToMini => self.planner.skip_to_mini(now, None),
             MenuAction::SkipToLong => self.planner.skip_to_long(now, None),
             MenuAction::Reset => self.planner.reset(now),
-            MenuAction::Resume | MenuAction::Preferences | MenuAction::Quit => {}
+            MenuAction::Resume
+            | MenuAction::Preferences
+            | MenuAction::DownloadUpdate
+            | MenuAction::Quit => {}
         }
     }
 

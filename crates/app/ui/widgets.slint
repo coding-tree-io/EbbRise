@@ -258,11 +258,10 @@ export component Stepper inherits HorizontalLayout {
 
 // Two options in one pill; the chosen one is filled.
 export component Segmented inherits Rectangle {
-    in property <string> first;
-    in property <string> second;
-    // false: first, true: second.
-    in-out property <bool> second-chosen;
-    callback changed();
+    in property <[string]> options;
+    // The chosen option. The parent sets it; a click only reports the new index.
+    in property <int> current;
+    callback changed(int);
 
     height: 38px;
     border-radius: 19px;
@@ -271,12 +270,12 @@ export component Segmented inherits Rectangle {
     background: Palette.ground;
     HorizontalLayout {
         padding: 3px;
-        for option[index] in [root.first, root.second]: cell := Rectangle {
-            property <bool> chosen: (index == 1) == root.second-chosen;
+        for option[index] in root.options: cell := Rectangle {
+            property <bool> chosen: index == root.current;
             accessible-role: button;
             accessible-label: option;
             accessible-checked: self.chosen;
-            accessible-action-default => { root.choose(index == 1); }
+            accessible-action-default => { root.choose(index); }
             border-radius: self.height / 2;
             background: self.chosen ? Palette.accent : (hit.has-hover ? Palette.button-hover : transparent);
             HorizontalLayout {
@@ -291,14 +290,13 @@ export component Segmented inherits Rectangle {
             }
             hit := TouchArea {
                 mouse-cursor: pointer;
-                clicked => { root.choose(index == 1); }
+                clicked => { root.choose(index); }
             }
         }
     }
-    function choose(second: bool) {
-        if (second != root.second-chosen) {
-            root.second-chosen = second;
-            root.changed();
+    function choose(index: int) {
+        if (index != root.current && index >= 0 && index < root.options.length) {
+            root.changed(index);
         }
     }
     FocusRing {
@@ -309,8 +307,16 @@ export component Segmented inherits Rectangle {
     }
     focus := KeyFocus {
         key-pressed(event) => {
-            if (event.text == Key.LeftArrow || event.text == Key.RightArrow || event.text == " ") {
-                root.choose(!root.second-chosen);
+            if (event.text == Key.LeftArrow) {
+                root.choose(root.current - 1);
+                return accept;
+            }
+            if (event.text == Key.RightArrow) {
+                root.choose(root.current + 1);
+                return accept;
+            }
+            if (event.text == " ") {
+                root.choose(Math.mod(root.current + 1, root.options.length));
                 return accept;
             }
             reject
@@ -406,7 +412,7 @@ export component Dropdown inherits Rectangle {
                 content-height: root.model.length * 34px + 8px;
                 // Open with the current item in the middle of the list, where the list allows.
                 init => {
-                    self.viewport-y = -max(0px, min(4px + root.current * 34px - (popup.height - 34px) / 2,
+                    self.content-y = -max(0px, min(4px + root.current * 34px - (popup.height - 34px) / 2,
                         root.model.length * 34px + 8px - popup.height));
                 }
                 VerticalLayout {

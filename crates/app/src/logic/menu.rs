@@ -19,6 +19,8 @@ pub enum MenuAction {
     Reset,
     /// Open the settings window.
     Preferences,
+    /// Open the latest release page (upstream's "Download latest version").
+    DownloadUpdate,
     Quit,
 }
 
@@ -36,6 +38,7 @@ impl MenuAction {
             Self::SkipToLong => "skip-long",
             Self::Reset => "reset",
             Self::Preferences => "preferences",
+            Self::DownloadUpdate => "download-update",
             Self::Quit => "quit",
         };
         id.to_owned()
@@ -53,6 +56,7 @@ impl MenuAction {
             Self::SkipToLong,
             Self::Reset,
             Self::Preferences,
+            Self::DownloadUpdate,
             Self::Quit,
         ]
         .into_iter()
@@ -192,7 +196,7 @@ mod tests {
                 "Reset breaks",
                 "-",
                 "Preferences",
-                "Quit Ebb",
+                "Quit EbbRise",
             ]
         );
         running.pause(0, BreaksPlanner::INDEFINITELY);
@@ -204,7 +208,7 @@ mod tests {
                 "Resume breaks",
                 "-",
                 "Preferences",
-                "Quit Ebb"
+                "Quit EbbRise"
             ]
         );
     }

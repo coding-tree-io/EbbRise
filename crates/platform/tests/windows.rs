@@ -226,7 +226,7 @@ fn a_signal_during_the_handler_waits_for_it_instead_of_reentering() {
 
 #[test]
 fn autostart_entry_is_written_read_and_removed() {
-    let name = format!("StretchCoreTest{}", std::process::id());
+    let name = format!("EbbRiseTest{}", std::process::id());
     platform::set_autostart(&name, Some(r#""C:\stretch.exe""#)).unwrap();
     assert_eq!(
         platform::autostart_command(&name).as_deref(),

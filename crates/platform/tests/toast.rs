@@ -8,7 +8,7 @@ use windows::UI::Notifications::ToastNotificationManager;
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RegDeleteTreeW};
 use windows::core::HSTRING;
 
-const APP_ID: &str = "StretchCore.Test";
+const APP_ID: &str = "EbbRise.Test";
 
 #[test]
 #[ignore = "shows a real toast"]

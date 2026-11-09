@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <!-- Ebb, full icon for 48 px and up: the tide in a ring (approved design C). -->
+  <!-- EbbRise, full icon for 48 px and up: the tide in a ring (approved design C). -->
   <defs><clipPath id="inside"><circle cx="128" cy="128" r="92"/></clipPath></defs>
   <rect width="256" height="256" rx="56" fill="#0F1612"/>
   <g clip-path="url(#inside)">

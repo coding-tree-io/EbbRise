@@ -2,6 +2,7 @@
 // Every change calls `changed()` at once; the app saves it (upstream has no Save button).
 
 import { Palette, Icon, KeyFocus, PillButton, RoundButton, Switch, Stepper, Segmented, Dropdown, Slider } from "widgets.slint";
+import { Words } from "words.slint";
 
 component NavItem inherits Rectangle {
     in property <string> text;
@@ -94,7 +95,7 @@ component Row inherits Rectangle {
             Text {
                 text: root.title;
                 color: Palette.text;
-                overflow: elide;
+                wrap: word-wrap;
             }
             if root.hint != "": Text {
                 text: root.hint;
@@ -143,6 +144,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> monitor-dnd;
     in property <[string]> languages;
     in-out property <int> language;
+    // 0 follows Windows, 1 light, 2 dark, as Palette.theme.
+    in-out property <int> theme;
     // Schedule
     in-out property <bool> mini-on;
     in-out property <int> mini-every;
@@ -175,8 +178,8 @@ export component SettingsWindow inherits Window {
     callback dark-mode-changed(bool);
     changed dark-mode => { root.dark-mode-changed(self.dark-mode); }
 
-    title: "Ebb settings";
-    icon: @image-url("icons/ebb.svg");
+    title: "EbbRise settings";
+    icon: @image-url("icons/ebbrise.svg");
     preferred-width: 900px;
     preferred-height: 820px;
     min-width: 820px;
@@ -202,10 +205,10 @@ export component SettingsWindow inherits Window {
                     Image {
                         width: 24px;
                         height: 24px;
-                        source: @image-url("icons/ebb-tray.svg");
+                        source: @image-url("icons/ebbrise-tray.svg");
                     }
                     Text {
-                        text: "Ebb";
+                        text: "EbbRise";
                         font-size: 15px;
                         font-weight: 600;
                         vertical-alignment: center;
@@ -213,25 +216,25 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 NavItem {
-                    text: "General";
+                    text: Words.general;
                     icon: "M 12 9 A 3 3 0 1 1 12 15 A 3 3 0 1 1 12 9 M 12 2 L 12 5 M 12 19 L 12 22 M 2 12 L 5 12 M 19 12 L 22 12 M 4.9 4.9 L 7 7 M 17 17 L 19.1 19.1 M 4.9 19.1 L 7 17 M 17 7 L 19.1 4.9";
                     current: root.page == 0;
                     clicked => { root.page = 0; }
                 }
                 NavItem {
-                    text: "Schedule";
+                    text: Words.schedule;
                     icon: "M 12 3 A 9 9 0 1 1 12 21 A 9 9 0 1 1 12 3 M 12 7 L 12 12 L 15 14";
                     current: root.page == 1;
                     clicked => { root.page = 1; }
                 }
                 NavItem {
-                    text: "Sounds";
+                    text: Words.sounds;
                     icon: "M 11 5 L 6 9 L 2 9 L 2 15 L 6 15 L 11 19 Z M 15.5 8.5 A 5 5 0 0 1 15.5 15.5";
                     current: root.page == 2;
                     clicked => { root.page = 2; }
                 }
                 NavItem {
-                    text: "About";
+                    text: Words.about;
                     icon: "M 12 3 A 9 9 0 1 1 12 21 A 9 9 0 1 1 12 3 M 12 11 L 12 17 M 12 7.5 L 12 7.6";
                     current: root.page == 3;
                     clicked => { root.page = 3; root.confirm-restore = false; }
@@ -245,27 +248,29 @@ export component SettingsWindow inherits Window {
             padding-right: 36px;
             spacing: 6px;
             alignment: start;
-            PageTitle { text: "General"; }
+            PageTitle { text: Words.general; }
             Rectangle { height: 10px; }
             SectionLabel { text: "BREAKS"; }
             Card {
                 Row {
-                    title: "Show breaks as";
+                    title: Words.show-breaks-as;
                     Centre {
                         Segmented {
-                            first: "Window";
-                            second: "Full screen";
-                            second-chosen <=> root.fullscreen;
-                            changed => { root.changed(); }
+                            options: [Words.window, Words.full-screen];
+                            current: root.fullscreen ? 1 : 0;
+                            changed(index) => {
+                                root.fullscreen = index == 1;
+                                root.changed();
+                            }
                         }
                     }
                 }
                 Row {
-                    title: "Show break ideas";
-                    hint: "Each idea names the study behind it";
+                    title: Words.show-ideas;
+                    hint: Words.show-ideas-hint;
                     Centre {
                         Switch {
-                            label: "Show break ideas";
+                            label: Words.show-ideas;
                             checked <=> root.ideas;
                             toggled => { root.changed(); }
                         }
@@ -288,10 +293,10 @@ export component SettingsWindow inherits Window {
             SectionLabel { text: "WINDOWS"; }
             Card {
                 Row {
-                    title: "Start at login";
+                    title: Words.start-at-login;
                     Centre {
                         Switch {
-                            label: "Start at login";
+                            label: Words.start-at-login;
                             checked <=> root.open-at-login;
                             toggled => { root.changed(); }
                         }
@@ -308,14 +313,32 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Language";
+                    title: Words.language;
                     last: true;
                     Centre {
                         Dropdown {
-                            label: "Language";
+                            label: Words.language;
                             model: root.languages;
                             current <=> root.language;
                             changed => { root.changed(); }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 8px; }
+            SectionLabel { text: Words.appearance; }
+            Card {
+                Row {
+                    title: Words.theme;
+                    last: true;
+                    Centre {
+                        Segmented {
+                            options: [Words.system, Words.light, Words.dark];
+                            current: root.theme;
+                            changed(index) => {
+                                root.theme = index;
+                                root.changed();
+                            }
                         }
                     }
                 }
@@ -328,23 +351,23 @@ export component SettingsWindow inherits Window {
             padding-right: 36px;
             spacing: 6px;
             alignment: start;
-            PageTitle { text: "Schedule"; }
+            PageTitle { text: Words.schedule; }
             Rectangle { height: 10px; }
-            SectionLabel { text: "MINI BREAKS"; }
+            SectionLabel { text: Words.mini-breaks; }
             Card {
                 Row {
-                    title: "Take mini breaks";
-                    hint: "Short pauses for your eyes";
+                    title: Words.take-mini;
+                    hint: Words.take-mini-hint;
                     Centre {
                         Switch {
-                            label: "Take mini breaks";
+                            label: Words.take-mini;
                             checked <=> root.mini-on;
                             toggled => { root.changed(); }
                         }
                     }
                 }
                 Row {
-                    title: "Every";
+                    title: Words.every;
                     Stepper {
                         label: "minutes between mini breaks";
                         unit: "min";
@@ -355,7 +378,7 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "For";
+                    title: Words.for-length;
                     Stepper {
                         label: "mini break length";
                         unit: "s";
@@ -367,8 +390,8 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Notify before";
-                    hint: "A notification shortly before";
+                    title: Words.notify-mini;
+                    hint: Words.notify-mini-hint;
                     Centre {
                         Switch {
                             label: "Notify before mini breaks";
@@ -378,8 +401,8 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Strict mode";
-                    hint: "No skipping or postponing";
+                    title: Words.strict-mini;
+                    hint: Words.strict-mini-hint;
                     last: true;
                     Centre {
                         Switch {
@@ -391,21 +414,21 @@ export component SettingsWindow inherits Window {
                 }
             }
             Rectangle { height: 8px; }
-            SectionLabel { text: "LONG BREAKS"; }
+            SectionLabel { text: Words.long-breaks; }
             Card {
                 Row {
-                    title: "Take long breaks";
-                    hint: "Time to stand up and walk";
+                    title: Words.take-long;
+                    hint: Words.take-long-hint;
                     Centre {
                         Switch {
-                            label: "Take long breaks";
+                            label: Words.take-long;
                             checked <=> root.long-on;
                             toggled => { root.changed(); }
                         }
                     }
                 }
                 Row {
-                    title: "Every";
+                    title: Words.every;
                     Stepper {
                         label: "minutes between long breaks";
                         unit: "min";
@@ -417,7 +440,7 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "For";
+                    title: Words.for-length;
                     Stepper {
                         label: "long break length";
                         unit: "min";
@@ -428,8 +451,8 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Notify before";
-                    hint: "A notification shortly before";
+                    title: Words.notify-long;
+                    hint: Words.notify-long-hint;
                     Centre {
                         Switch {
                             label: "Notify before long breaks";
@@ -439,8 +462,8 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Strict mode";
-                    hint: "No skipping or postponing";
+                    title: Words.strict-long;
+                    hint: Words.strict-long-hint;
                     last: true;
                     Centre {
                         Switch {
@@ -459,9 +482,9 @@ export component SettingsWindow inherits Window {
             padding-right: 36px;
             spacing: 6px;
             alignment: start;
-            PageTitle { text: "Sounds"; }
+            PageTitle { text: Words.sounds; }
             Rectangle { height: 10px; }
-            for kind[k] in ["MINI BREAKS", "LONG BREAKS"]: VerticalLayout {
+            for kind[k] in [Words.mini-breaks, Words.long-breaks]: VerticalLayout {
                 spacing: 6px;
                 padding-bottom: 8px;
                 SectionLabel { text: kind; }
@@ -536,30 +559,30 @@ export component SettingsWindow inherits Window {
             padding-right: 36px;
             spacing: 14px;
             alignment: start;
-            PageTitle { text: "About"; }
+            PageTitle { text: Words.about; }
             HorizontalLayout {
                 spacing: 18px;
                 alignment: start;
                 Image {
                     width: 64px;
                     height: 64px;
-                    source: @image-url("icons/ebb.svg");
+                    source: @image-url("icons/ebbrise.svg");
                 }
                 Centre {
                     Text {
-                        text: "Ebb";
+                        text: "EbbRise";
                         font-size: 22px;
                         font-weight: 600;
                         color: Palette.text;
                     }
                     Text {
-                        text: "Version " + root.version;
+                        text: Words.version + root.version;
                         color: Palette.text-secondary;
                     }
                 }
             }
             Text {
-                text: "Break reminders for Windows. Every break idea names the study behind it.";
+                text: Words.tagline;
                 wrap: word-wrap;
                 color: Palette.text-secondary;
             }
@@ -578,7 +601,7 @@ export component SettingsWindow inherits Window {
                 spacing: 12px;
                 alignment: start;
                 PillButton {
-                    text: root.confirm-restore ? "Restore every setting" : "Restore defaults";
+                    text: root.confirm-restore ? "Restore every setting" : Words.restore-defaults;
                     primary: root.confirm-restore;
                     compact: true;
                     clicked => {

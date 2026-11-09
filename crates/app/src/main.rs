@@ -6,12 +6,16 @@ mod break_window;
 mod logging;
 mod logic;
 mod settings_window;
+mod settings_words;
+mod sounds;
+mod storage;
 mod tray_menu;
 mod ui;
+mod update;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use breaks::until_morning;
 use commands::Command;
@@ -23,9 +27,10 @@ use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::break_window::BreakView;
 use crate::logic::{BreakButton, Core, Effect, Environment, MenuAction, MenuEntry};
+use crate::storage::{app_folder, load_settings, log_path, prepare_app_folder};
 use crate::tray_menu::{build_menu, tray_icon};
 
-const APP_ID: &str = "StretchCore";
+const APP_ID: &str = "EbbRise";
 
 /// The real OS behind [`Environment`].
 struct Windows;
@@ -53,13 +58,15 @@ struct App {
     tray: TrayIcon,
     /// The menu the tray shows, so it is rebuilt only when it changes.
     menu: Vec<MenuEntry>,
-    /// `%APPDATA%\stretch-core\audio`, where the user's sounds live.
+    /// `%APPDATA%\EbbRise\audio`, where the user's sounds live.
     audio_folder: Option<PathBuf>,
     /// The break window while a break runs.
     break_view: Option<BreakView>,
     settings_window: Option<ui::SettingsWindow>,
     /// The sound names behind the settings window's sound lists.
     settings_sounds: Vec<String>,
+    /// A newer release tag, once the update check found one.
+    new_version: Option<String>,
 }
 
 type AppAction = Box<dyn FnOnce(&mut App)>;
@@ -89,24 +96,15 @@ fn with_app(action: impl FnOnce(&mut App) + 'static) {
 }
 
 fn main() {
-    if !platform::is_first_instance(r"Local\StretchCore") {
+    if !platform::is_first_instance(r"Local\EbbRise") {
         let args: Vec<String> = std::env::args().skip(1).collect();
         return run_second_instance(&args);
     }
-    let folder = app_folder();
-    if let Some(folder) = &folder {
-        logging::start(&log_path(folder));
-    }
+    let audio_folder = prepare_app_folder();
     info!(version = env!("CARGO_PKG_VERSION"), "starting");
     let settings = load_settings();
     sync_autostart(settings.open_at_login);
-    let audio_folder = folder.map(|folder| folder.join("audio"));
-    if let Some(audio) = &audio_folder
-        && let Err(error) = std::fs::create_dir_all(audio)
-    {
-        warn!(%error, "audio folder not created");
-    }
-    if let Err(error) = toast::register(APP_ID, "Ebb") {
+    if let Err(error) = toast::register(APP_ID, "EbbRise") {
         error!(%error, "toast registration failed");
     }
     let signals =
@@ -139,9 +137,11 @@ fn main() {
             break_view: None,
             settings_window: None,
             settings_sounds: Vec::new(),
+            new_version: None,
         });
     });
     with_app(App::rearm_timer_and_refresh_tray);
+    update::start();
     // Slint's loop also dispatches the signal window's and the tray's Win32 messages.
     if let Err(error) = slint::run_event_loop_until_quit() {
         error!(%error, "event loop failed");
@@ -210,6 +210,9 @@ impl App {
 
     fn on_menu(&mut self, action: MenuAction) {
         info!(?action, "menu");
+        if action == MenuAction::DownloadUpdate {
+            return open_in_shell(update::RELEASES);
+        }
         if action == MenuAction::Preferences {
             return self.open_settings();
         }
@@ -236,29 +239,22 @@ impl App {
         let (text, paused) = self.core.tray(now);
         let _ = self.tray.set_tooltip(Some(text));
         let _ = self.tray.set_icon(Some(tray_icon(paused)));
-        let menu = self.core.menu(now);
+        let mut menu = self.update_entries();
+        menu.extend(self.core.menu(now));
         if menu != self.menu {
             self.tray.set_menu(Some(Box::new(build_menu(&menu))));
             self.menu = menu;
         }
     }
 
-    /// Plays the user's `<name>.wav` from the audio folder at the settings' volume.
+    /// Plays sound `name` (the user's file or a built-in one) at the settings' volume.
     fn play(&self, name: &str) {
-        // shortcut: Stretchly's own WAVs are not bundled until their licence is known (ADR 0001 R4).
-        let Some(path) = self
-            .audio_folder
-            .as_deref()
-            .and_then(|folder| sound_file(folder, name))
-        else {
+        let Some(wav) = sounds::wav(self.audio_folder.as_deref(), name) else {
             return info!(name, "no sound file");
         };
-        match std::fs::read(&path) {
-            Ok(wav) => match sound::with_volume(&wav, self.core.settings().volume) {
-                Some(wav) => sound::play(wav),
-                None => warn!(path = %path.display(), "not a WAV file"),
-            },
-            Err(error) => warn!(path = %path.display(), %error, "sound unreadable"),
+        match sound::with_volume(&wav, self.core.settings().volume) {
+            Some(wav) => sound::play(wav),
+            None => warn!(name, "not a WAV file"),
         }
     }
 }
@@ -272,7 +268,7 @@ fn run_second_instance(args: &[String]) {
     };
     match command.name.as_str() {
         "help" => println!("{}", commands::HELP),
-        "version" => println!("Ebb version {}", env!("CARGO_PKG_VERSION")),
+        "version" => println!("EbbRise version {}", env!("CARGO_PKG_VERSION")),
         "logs" => match app_folder() {
             Some(folder) => println!("{}", log_path(&folder).display()),
             None => eprintln!("APPDATA is not set, so there is no log file"),
@@ -281,21 +277,10 @@ fn run_second_instance(args: &[String]) {
             let taken = platform::running_app_window()
                 .is_some_and(|window| platform::send_command(window, args));
             if !taken {
-                eprintln!("the running Stretch app did not take the command");
+                eprintln!("the running EbbRise app did not take the command");
             }
         }
     }
-}
-
-/// `<name>.wav` in `folder`, when the name is a plain file name (upstream `audioResolver`)
-/// and the file exists.
-fn sound_file(folder: &Path, name: &str) -> Option<PathBuf> {
-    let file = format!("{name}.wav");
-    let plain = file
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
-    let path = folder.join(file);
-    (plain && path.is_file()).then_some(path)
 }
 
 /// Upstream syncs the login item with `openAtLogin` at every start.
@@ -309,49 +294,9 @@ fn sync_autostart(open_at_login: bool) {
     }
 }
 
-/// `%APPDATA%\stretch-core`, where the config and the logs live.
-fn app_folder() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|app_data| PathBuf::from(app_data).join("stretch-core"))
-}
-
-fn log_path(app_folder: &Path) -> PathBuf {
-    app_folder.join("logs").join("main.log")
-}
-
-fn load_settings() -> Settings {
-    let Some(folder) = app_folder() else {
-        return Settings::default();
-    };
-    let own = folder.join("config.json");
-    let stretchly = folder.with_file_name("Stretchly").join("config.json");
-    match Settings::load_or_import(&own, &stretchly) {
-        Ok(settings) => {
-            info!(path = %own.display(), "settings loaded");
-            settings
-        }
-        Err(error) => {
-            error!(path = %own.display(), %error, "settings unreadable, using defaults");
-            Settings::default()
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sound_files_are_plain_names_inside_the_audio_folder() {
-        let folder = std::env::temp_dir().join(format!("stretch-audio-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("my-chime_2.wav"), b"").unwrap();
-        assert_eq!(
-            sound_file(&folder, "my-chime_2"),
-            Some(folder.join("my-chime_2.wav"))
-        );
-        assert_eq!(sound_file(&folder, "missing"), None);
-        assert_eq!(sound_file(&folder, r"..\my-chime_2"), None);
-        assert_eq!(sound_file(&folder, "sub/my-chime_2"), None);
-        std::fs::remove_dir_all(&folder).unwrap();
+/// Opens a folder in Explorer, or a web address in the default browser.
+fn open_in_shell(target: &str) {
+    if let Err(error) = std::process::Command::new("explorer").arg(target).spawn() {
+        warn!(%error, "could not open {target}");
     }
 }

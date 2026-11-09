@@ -44,7 +44,7 @@ pub struct SignalWindow {
 }
 
 const TIMER_ID: usize = 1;
-const CLASS_NAME: PCWSTR = w!("StretchCoreSignals");
+const CLASS_NAME: PCWSTR = w!("EbbRiseSignals");
 /// Marks our WM_COPYDATA messages, so data from other programs is ignored.
 const COMMAND_TAG: usize = 0x5354_4331;
 /// Arguments longer than this are not a real command line.
@@ -84,7 +84,7 @@ impl SignalWindow {
             CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
                 CLASS_NAME,
-                w!("stretch-core signals"),
+                w!("EbbRise signals"),
                 WS_OVERLAPPED,
                 0,
                 0,

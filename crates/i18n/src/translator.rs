@@ -7,7 +7,7 @@ use crate::locales::LOCALES;
 const FALLBACK: &str = "en";
 /// The app's own name replaces Stretchly's in every text.
 const UPSTREAM_NAME: &str = "Stretchly";
-const APP_NAME: &str = "Ebb";
+const APP_NAME: &str = "EbbRise";
 const NESTING_START: &str = "$t(";
 
 /// One language of the app, with English for missing texts, as upstream's i18next setup.
@@ -65,6 +65,13 @@ impl Translator {
     /// The text at a dotted `key`, such as `main.pause`; the key itself when no file has it.
     pub fn text(&self, key: &str) -> String {
         self.translate(key, None, &[])
+    }
+
+    /// The text at `key` in the chosen language only: `None` for English, or when that
+    /// language's file lacks the key, so a caller can keep its own English wording.
+    pub fn translated(&self, key: &str) -> Option<String> {
+        let text = self.language.as_ref()?.find(key)?;
+        Some(text.replace(UPSTREAM_NAME, APP_NAME))
     }
 
     /// The plural form of `key` for `count`, with `{{count}}` filled in.
@@ -188,7 +195,7 @@ mod tests {
             english.with("main.miniBreakIn", &[("seconds", "1")]),
             "Mini break in 1 second"
         );
-        assert_eq!(english.text("main.quitStretchly"), "Quit Ebb");
+        assert_eq!(english.text("main.quitStretchly"), "Quit EbbRise");
         assert_eq!(english.text("no.such.key"), "no.such.key");
     }
 

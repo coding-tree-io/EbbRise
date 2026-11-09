@@ -40,9 +40,16 @@ pub fn with_volume(wav: &[u8], volume: f64) -> Option<Vec<u8>> {
     Some(result)
 }
 
-/// Scales 16-bit samples, or 8-bit ones, which are unsigned around 128; other sizes stay.
+/// Scales 24- and 16-bit samples, or 8-bit ones, which are unsigned around 128; other sizes stay.
 fn scale(samples: &mut [u8], bits: u16, volume: f64) {
     match bits {
+        24 => {
+            for sample in samples.as_chunks_mut::<3>().0 {
+                let value = i32::from_le_bytes([0, sample[0], sample[1], sample[2]]) >> 8;
+                let scaled = (f64::from(value) * volume).round() as i32;
+                sample.copy_from_slice(&scaled.to_le_bytes()[..3]);
+            }
+        }
         16 => {
             for sample in samples.as_chunks_mut::<2>().0 {
                 let scaled = (f64::from(i16::from_le_bytes(*sample)) * volume).round() as i16;
@@ -106,6 +113,9 @@ mod tests {
         assert_eq!(with_volume(&loud, 1.0).unwrap(), loud);
         let eight_bit = with_volume(&wav(8, &[255, 128, 0]), 0.5).unwrap();
         assert_eq!(eight_bit[eight_bit.len() - 3..], [192, 128, 64]);
+        // 24-bit: 0x400000 and -0x400000 halve to 0x200000 and -0x200000.
+        let deep = with_volume(&wav(24, &[0, 0, 0x40, 0, 0, 0xC0]), 0.5).unwrap();
+        assert_eq!(deep[deep.len() - 6..], [0, 0, 0x20, 0, 0, 0xE0]);
         assert_eq!(with_volume(b"not a wav file", 0.5), None);
     }
 }

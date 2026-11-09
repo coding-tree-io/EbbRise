@@ -40,7 +40,7 @@ mod tests {
 
     #[test]
     fn a_full_log_moves_to_the_old_log_and_a_small_one_grows() {
-        let folder = std::env::temp_dir().join(format!("stretch-core-log-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("ebbrise-log-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         let log = folder.join("logs").join("main.log");
 

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use settings::Settings;
 
 fn empty_folder(name: &str) -> PathBuf {
-    let folder = std::env::temp_dir().join(format!("stretch-core-{}-{name}", std::process::id()));
+    let folder = std::env::temp_dir().join(format!("ebbrise-{}-{name}", std::process::id()));
     let _ = fs::remove_dir_all(&folder);
     fs::create_dir_all(&folder).unwrap();
     folder
@@ -35,7 +35,7 @@ fn saved_settings_load_back_unchanged_with_unknown_keys() {
 fn first_start_imports_stretchly_config_and_saves_it() {
     let folder = empty_folder("import");
     let stretchly = folder.join("Stretchly").join("config.json");
-    let own = folder.join("stretch-core").join("config.json");
+    let own = folder.join("EbbRise").join("config.json");
     fs::create_dir_all(stretchly.parent().unwrap()).unwrap();
     fs::write(&stretchly, r#"{"miniBreakInterval":45000}"#).unwrap();
 
@@ -68,7 +68,7 @@ fn broken_config_is_reported_and_left_untouched() {
 #[test]
 fn unreadable_stretchly_config_fails_the_import_so_the_next_start_retries() {
     let folder = empty_folder("unreadable");
-    let own = folder.join("stretch-core").join("config.json");
+    let own = folder.join("EbbRise").join("config.json");
     // A folder in place of the file: it exists but cannot be read as text.
     let stretchly = folder.join("Stretchly").join("config.json");
     fs::create_dir_all(&stretchly).unwrap();

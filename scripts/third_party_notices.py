@@ -13,7 +13,7 @@ from pathlib import Path
 
 TARGET = "x86_64-pc-windows-msvc"
 NOTICE_NAMES = ("LICEN", "COPYING", "COPYRIGHT", "NOTICE", "UNLICENSE")
-# Slint is offered under three licences; Ebb uses the royalty-free one.
+# Slint is offered under three licences; EbbRise uses the royalty-free one.
 SLINT_LICENCE = "LicenseRef-Slint-Royalty-free-2.0.md"
 OUTPUT = Path("THIRD-PARTY-NOTICES.txt")
 MIT_TEXT = """Copyright (c) {authors}
@@ -127,14 +127,19 @@ def main():
     missing = unresolved
 
     parts = [
-        "Third-party notices for Ebb",
+        "Third-party notices for EbbRise",
         "",
-        "Ebb is 0BSD (LICENSE). It is a port of Stretchly, whose notice follows.",
+        "EbbRise is 0BSD (LICENSE). It is a port of Stretchly, whose notice follows.",
         "",
         "=" * 78,
         "Stretchly (https://github.com/hovancik/stretchly), BSD-2-Clause",
         "=" * 78,
         Path("LICENSE-STRETCHLY").read_text(encoding="utf-8").strip(),
+        "",
+        "=" * 78,
+        "Built-in sounds",
+        "=" * 78,
+        Path("crates/app/audio/CREDITS.md").read_text(encoding="utf-8").strip(),
     ]
     for text, labels in sorted(groups.values(), key=lambda group: group[1][0]):
         parts += ["", "=" * 78, *labels, "=" * 78, text]

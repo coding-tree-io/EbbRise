@@ -30,6 +30,8 @@ pub struct SettingsForm {
     pub monitor_dnd: bool,
     /// Index into [`LANGUAGES`].
     pub language: usize,
+    /// Index into [`THEMES`]: follow Windows, light or dark.
+    pub theme: usize,
     pub mini: BreakForm,
     pub long: BreakForm,
     /// Sound names; the first is [`SILENCE`].
@@ -40,6 +42,8 @@ pub struct SettingsForm {
 }
 
 const MINUTE: i64 = 60_000;
+/// Stretchly's `themeSource` values, in the order of the window's theme switch.
+const THEMES: [&str; 3] = ["system", "light", "dark"];
 
 impl SettingsForm {
     /// `sound_files` are the names of the WAV files in the audio folder.
@@ -69,6 +73,10 @@ impl SettingsForm {
             monitor_dnd: s.monitor_dnd,
             language: language(&s.language)
                 .or_else(|| language("en"))
+                .unwrap_or(0),
+            theme: THEMES
+                .iter()
+                .position(|theme| *theme == s.theme_source)
                 .unwrap_or(0),
             mini: BreakForm {
                 on: s.mini_break,
@@ -123,6 +131,9 @@ impl SettingsForm {
         }
         if self.language != before.language {
             s.language = LANGUAGES[self.language].0.to_owned();
+        }
+        if self.theme != before.theme {
+            s.theme_source = THEMES[self.theme.min(THEMES.len() - 1)].to_owned();
         }
         apply_mini(&self.mini, &before.mini, &mut s);
         apply_long(&self.long, &before.long, &mut s);
@@ -206,6 +217,7 @@ mod tests {
         form.long.length = 7;
         form.sound_choice[1] = 1;
         form.volume = 45;
+        form.theme = 2;
         form.language = LANGUAGES.iter().position(|(c, _)| *c == "el").unwrap();
         let s = form.apply(&base);
         assert_eq!(s.mini_break_interval, 25 * MINUTE);
@@ -213,6 +225,7 @@ mod tests {
         assert_eq!(s.long_break_duration, 7 * MINUTE);
         assert_eq!(s.mini_break_audio, "wind-chime");
         assert_eq!((s.volume, s.language.as_str()), (0.45, "el"));
+        assert_eq!(s.theme_source, "dark");
         assert_eq!(form.sound_labels()[0], "None");
     }
 }
