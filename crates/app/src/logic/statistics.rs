@@ -133,6 +133,15 @@ impl Statistics {
         records.push(self.today.clone());
         records
     }
+
+    /// Gives back records from [`Self::take_changed`] that were not saved: the ended days wait
+    /// for the next save, and today is saved again from its live record.
+    pub fn keep_unsaved(&mut self, mut records: Vec<DayStatistics>) {
+        records.retain(|record| record.day != self.today.day);
+        records.append(&mut self.ended);
+        self.ended = records;
+        self.changed = true;
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +194,9 @@ mod tests {
             "the day ends with its live total"
         );
         assert!(stats.take_changed().is_empty());
+        stats.keep_unsaved(records);
+        let days: Vec<_> = stats.take_changed().into_iter().map(|r| r.day).collect();
+        assert_eq!(days, ["2026-11-09", "2026-11-10"], "an unsaved day waits");
         assert!(!stats.roll_over("2026-11-10", None));
     }
 }

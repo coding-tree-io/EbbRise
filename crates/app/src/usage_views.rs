@@ -24,11 +24,16 @@ impl App {
         app_folder().map(|folder| folder.join("statistics.json"))
     }
 
-    /// Saves the records that changed since the last save.
+    /// Saves the records that changed since the last save; keeps them for the next save when
+    /// the write fails.
     pub(crate) fn save_statistics(&mut self) {
         let records = self.core.statistics_to_save(platform::awake_ms());
-        if let Some(path) = self.statistics_path() {
-            statistics_store::save(&path, &records);
+        let Some(path) = self.statistics_path() else {
+            return;
+        };
+        if let Err(error) = statistics_store::save(&path, &records) {
+            warn!(%error, "statistics not saved");
+            self.core.keep_unsaved_statistics(records);
         }
     }
 
@@ -36,8 +41,10 @@ impl App {
     pub(crate) fn save_today_statistics(&mut self) {
         self.save_statistics();
         let today = self.core.today_statistics(platform::awake_ms());
-        if let Some(path) = self.statistics_path() {
-            statistics_store::save(&path, &[today]);
+        if let Some(path) = self.statistics_path()
+            && let Err(error) = statistics_store::save(&path, &[today])
+        {
+            warn!(%error, "statistics not saved");
         }
     }
 

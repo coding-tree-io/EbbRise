@@ -397,6 +397,8 @@ mod tests {
         running: Option<Vec<String>>,
         process_reads: std::cell::Cell<usize>,
         morning: Option<i64>,
+        /// The clock has passed into the next day.
+        next_day: bool,
     }
 
     impl Environment for FakeOs {
@@ -410,7 +412,7 @@ mod tests {
         }
 
         fn day(&self) -> String {
-            "2026-11-09".to_owned()
+            if self.next_day { "2026-11-10" } else { "2026-11-09" }.to_owned()
         }
     }
 
@@ -878,6 +880,23 @@ Next Long break in about 2 minutes"
             (2, true)
         );
         assert!(today.active_ms.is_some_and(|ms| ms > 400_000));
+    }
+
+    #[test]
+    fn a_new_day_seen_while_idle_gives_the_idle_time_to_neither_day() {
+        let mut sim = Sim::new(r#","dailyLimit":true,"dailyLimitTime":36000000"#);
+        sim.run_until(100_000);
+        sim.away_since = Some(100_000);
+        sim.now = 160_000;
+        sim.os.next_day = true;
+        sim.signal(Signal::Timer);
+        let records = sim.core.statistics_to_save(sim.now);
+        let active: Vec<_> = records.iter().map(|r| (r.day.as_str(), r.active_ms)).collect();
+        let [("2026-11-09", Some(old)), ("2026-11-10", Some(new))] = active[..] else {
+            panic!("{active:?}");
+        };
+        assert!(old <= 105_000, "the idle minute is not counted: {old}");
+        assert!(new >= 0, "{new}");
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! `%APPDATA%\EbbRise\statistics.json`: one record per day, oldest first, for the last 365 days.
 
+use std::io;
 use std::path::Path;
 
 use crate::logic::DayStatistics;
@@ -8,27 +9,29 @@ const DAYS_KEPT: usize = 365;
 
 /// The saved records; empty when the file is missing or unreadable.
 pub(crate) fn load(path: &Path) -> Vec<DayStatistics> {
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    serde_json::from_str(&text).unwrap_or_else(|error| {
+    read(path).unwrap_or_else(|error| {
         tracing::warn!(%error, "statistics unreadable");
         Vec::new()
     })
 }
 
-/// Puts `records` into the file, replacing the saved record of the same day.
-pub(crate) fn save(path: &Path, records: &[DayStatistics]) {
+/// The saved records; empty only when the file is missing.
+fn read(path: &Path) -> io::Result<Vec<DayStatistics>> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(serde_json::from_str(&text)?),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Puts `records` into the file, replacing the saved record of the same day. An unreadable
+/// file stays as it is, so its history is not lost.
+pub(crate) fn save(path: &Path, records: &[DayStatistics]) -> io::Result<()> {
     if records.is_empty() {
-        return;
+        return Ok(());
     }
-    let merged = merge(load(path), records);
-    let result = serde_json::to_vec_pretty(&merged)
-        .map_err(std::io::Error::from)
-        .and_then(|bytes| settings::write_atomically(path, &bytes));
-    if let Err(error) = result {
-        tracing::warn!(%error, "statistics not saved");
-    }
+    let merged = merge(read(path)?, records);
+    settings::write_atomically(path, &serde_json::to_vec_pretty(&merged)?)
 }
 
 fn merge(mut saved: Vec<DayStatistics>, records: &[DayStatistics]) -> Vec<DayStatistics> {
@@ -79,10 +82,14 @@ mod tests {
     #[test]
     fn save_writes_a_file_that_load_reads_back() {
         let path = std::env::temp_dir().join(format!("ebbrise-stats-{}.json", std::process::id()));
-        save(&path, &[day("2026-11-09", 4)]);
-        save(&path, &[day("2026-11-10", 1)]);
+        save(&path, &[day("2026-11-09", 4)]).unwrap();
+        save(&path, &[day("2026-11-10", 1)]).unwrap();
         let loaded = load(&path);
+        std::fs::write(&path, "not json").unwrap();
+        assert!(save(&path, &[day("2026-11-11", 1)]).is_err());
+        let kept = std::fs::read_to_string(&path).unwrap();
         std::fs::remove_file(&path).unwrap();
         assert_eq!(loaded, [day("2026-11-09", 4), day("2026-11-10", 1)]);
+        assert_eq!(kept, "not json", "an unreadable file is not replaced");
     }
 }

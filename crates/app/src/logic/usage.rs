@@ -90,7 +90,12 @@ impl Core {
         records
     }
 
-    /// Rolls over to a new day and reads the activity.
+    /// Gives back records from [`Core::statistics_to_save`] that were not written.
+    pub fn keep_unsaved_statistics(&mut self, records: Vec<DayStatistics>) {
+        self.usage.stats.keep_unsaved(records);
+    }
+
+    /// Reads the activity and rolls over to a new day.
     pub(super) fn track_usage(
         &mut self,
         now: i64,
@@ -98,6 +103,8 @@ impl Core {
         os: &impl Environment,
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
+        // First the activity: an idle time found now can start before the new day.
+        self.observe_activity(now, idle, &mut effects);
         let day = os.day();
         if self.usage.stats.today().day != day {
             let active_ms = self.today_statistics(now).active_ms;
@@ -111,7 +118,6 @@ impl Core {
             self.usage.limit_at = Some(self.settings().daily_limit_time);
             effects.extend(self.close_daily_limit());
         }
-        self.observe_activity(now, idle, &mut effects);
         effects
     }
 
