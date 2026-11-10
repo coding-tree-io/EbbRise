@@ -8,7 +8,7 @@ use i18n::Translator;
 use settings::Settings;
 use slint::{ComponentHandle, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 
-use crate::logic::{BreakButton, BreakScreen, countdown, ring_commands};
+use crate::logic::{BreakButton, BreakScreen, countdown, idea_shown, ring_commands};
 use crate::ui::{BreakWindow, Palette};
 
 pub struct BreakView {
@@ -54,14 +54,15 @@ impl BreakView {
             window.set_caption(caption.as_str().into());
             window.set_ring(ring.as_str().into());
             window.set_passed(passed.clamp(0.0, 1.0));
+            window.set_idea_shown(idea_shown(time));
             window.set_show_postpone(time.may_postpone);
             window.set_show_skip(time.may_skip);
             window.set_show_finish(time.awaiting_finish);
         }
     }
 
-    /// Shows a still ring with `number` and `caption`, no water, and the Postpone and Skip
-    /// buttons (the daily-limit reminder).
+    /// Shows a still ring with `number` and `caption`, no water, the words at once, and the
+    /// Postpone and Skip buttons (the daily-limit reminder).
     pub fn show_still(&self, number: &str, caption: &str) {
         let full = BreakTime {
             long: false,
@@ -76,6 +77,7 @@ impl BreakView {
             window.set_caption(caption.into());
             window.set_ring(ring_commands(&full).into());
             window.set_passed(0.0);
+            window.set_idea_shown(true);
             window.set_show_postpone(true);
             window.set_show_skip(true);
             window.set_show_finish(false);

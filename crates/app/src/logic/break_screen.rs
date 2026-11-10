@@ -75,6 +75,17 @@ pub fn countdown(words: &Translator, time: &BreakTime) -> (String, String) {
     (number, caption)
 }
 
+/// The idea stays hidden this long, so it never shows to a user who postpones or skips
+/// as soon as the break appears.
+const IDEA_DELAY_MS: i64 = 4_000;
+
+/// Whether the break shows its idea yet: after [`IDEA_DELAY_MS`], or a quarter of a shorter
+/// break. The ticks come once a second, so half a second early counts as due.
+pub fn idea_shown(time: &BreakTime) -> bool {
+    let passed = time.length - time.remaining;
+    passed + 500 >= IDEA_DELAY_MS.min(time.length / 4)
+}
+
 /// SVG path commands for the ring's arc: clockwise from the top, as long as the time left.
 pub fn ring_commands(time: &BreakTime) -> String {
     if time.length <= 0 || time.remaining <= 0 {
@@ -136,6 +147,14 @@ mod tests {
         );
         assert!(ring_commands(&time(20_000, 20_000)).contains("118 226 A"));
         assert_eq!(ring_commands(&time(0, 20_000)), "");
+    }
+
+    #[test]
+    fn idea_shows_after_four_seconds_or_a_quarter_of_a_short_break() {
+        assert!(!idea_shown(&time(17_000, 20_000)));
+        assert!(idea_shown(&time(16_000, 20_000)));
+        assert!(!idea_shown(&time(5_000, 5_000)));
+        assert!(idea_shown(&time(4_000, 5_000)));
     }
 
     #[test]

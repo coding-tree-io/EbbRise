@@ -20,7 +20,7 @@ use ideas::{BreakIdea, Ideas};
 use platform::Signal;
 use settings::Settings;
 
-pub use break_screen::{BreakButton, BreakScreen, countdown, ring_commands};
+pub use break_screen::{BreakButton, BreakScreen, countdown, idea_shown, ring_commands};
 pub use menu::{MenuAction, MenuEntry};
 pub use settings_form::{BreakForm, SettingsForm, UsageForm};
 #[allow(unused_imports)] // The statistics window will use this when charts are added.

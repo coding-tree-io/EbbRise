@@ -100,13 +100,13 @@ fn from_settings(settings: &Settings) -> (Vec<BreakIdea>, Vec<BreakIdea>) {
 
 /// The evidence-based ideas in [`evidence`]: the action as the title, the finding as the text.
 fn built_in() -> (Vec<BreakIdea>, Vec<BreakIdea>) {
-    let ideas = |entries: &[(&str, &str, &str)]| {
+    let ideas = |entries: &[evidence::Evidence]| {
         entries
             .iter()
-            .map(|(title, text, source)| BreakIdea {
-                title: (*title).to_owned(),
-                text: (*text).to_owned(),
-                source: (*source).to_owned(),
+            .map(|entry| BreakIdea {
+                title: entry.action.to_owned(),
+                text: entry.finding.to_owned(),
+                source: entry.source.to_owned(),
             })
             .collect()
     };
