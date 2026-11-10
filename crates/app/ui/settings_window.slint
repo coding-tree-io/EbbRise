@@ -325,10 +325,11 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
-                    title: "Hold breaks during Do Not Disturb";
+                    title: "No breaks during Do Not Disturb";
+                    hint: "While Windows Do Not Disturb is on, no breaks come. The timer restarts when it ends.";
                     Centre {
                         Switch {
-                            label: "Hold breaks during Do Not Disturb";
+                            label: "No breaks during Do Not Disturb";
                             checked <=> root.monitor-dnd;
                             toggled => { root.changed(); }
                         }
