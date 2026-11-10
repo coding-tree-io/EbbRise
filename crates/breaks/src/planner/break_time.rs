@@ -38,16 +38,16 @@ impl BreaksPlanner {
         let awaiting_finish = self.deadline.is_none();
         let remaining = self.deadline.map_or(0, |deadline| (deadline - now).max(0));
         let passed = self.passed_percent(now);
-        let postpone_offered = can_postpone(rule.enabled, passed, rule.percent);
+        // As upstream's `postponable`: the limit is part of it, so Skip shows once it is used.
+        let postponable = rule.enabled && self.postpones < rule.limit;
         Some(BreakTime {
             long: rule.start == Event::StartLongBreak,
             remaining,
             length: self.delay,
             may_postpone: !awaiting_finish
                 && !rule.strict
-                && postpone_offered
-                && self.postpones < rule.limit,
-            may_skip: !awaiting_finish && can_skip(rule.strict, rule.enabled, passed, rule.percent),
+                && can_postpone(postponable, passed, rule.percent),
+            may_skip: !awaiting_finish && can_skip(rule.strict, postponable, passed, rule.percent),
             awaiting_finish,
         })
     }
@@ -111,6 +111,17 @@ mod tests {
         assert!(early.may_postpone && !early.may_skip && !early.long);
         let late = planner.break_time(610_000).unwrap();
         assert!(!late.may_postpone && late.may_skip);
+    }
+
+    #[test]
+    fn skip_shows_at_once_after_the_postpone_limit_is_used() {
+        let mut planner =
+            in_mini_break(r#","miniBreakPostpone":true,"miniBreakPostponesLimit":1"#);
+        assert!(planner.postpone(603_000));
+        planner.advance(planner.deadline.unwrap());
+        let start = planner.deadline.unwrap() - planner.delay;
+        let again = planner.break_time(start + 1_000).unwrap();
+        assert!(!again.may_postpone && again.may_skip);
     }
 
     #[test]

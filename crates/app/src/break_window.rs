@@ -44,11 +44,16 @@ impl BreakView {
         window.on_skip(press(BreakButton::Skip));
         window.on_finish(press(BreakButton::Finish));
         place(&window, settings);
+        // Only the buttons end a break early: Alt+F4 does not close it.
+        window
+            .window()
+            .on_close_requested(|| slint::CloseRequestResponse::KeepWindowShown);
         window.show()?;
-        // Always-on-top alone leaves the keyboard with the app behind; the break takes it.
+        // The window exists only once shown. Always-on-top alone leaves the keyboard with the
+        // app behind; the break takes it, and loses its minimize routes.
         Timer::single_shot(Duration::from_millis(50), move || {
-            if !platform::bring_to_front(&title) {
-                tracing::warn!(title, "break window not brought to the front");
+            if !(platform::lock_window(&title) && platform::bring_to_front(&title)) {
+                tracing::warn!(title, "break window not locked in front");
             }
         });
         let tick = Timer::default();

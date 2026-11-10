@@ -6,7 +6,9 @@ use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, EnumThreadWindows, GetForegroundWindow, GetWindowTextW,
-    GetWindowThreadProcessId, SetForegroundWindow,
+    GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, GetWindowThreadProcessId, SW_HIDE, SW_SHOW,
+    SetForegroundWindow, SetWindowLongPtrW, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
 };
 use windows::core::BOOL;
 
@@ -32,6 +34,34 @@ pub fn bring_to_front(title: &str) -> bool {
         if joined {
             let _ = AttachThreadInput(own_thread, foreground_thread, false);
         }
+    }
+    true
+}
+
+/// Takes the minimize and maximize styles and the taskbar button from the window titled
+/// `title` on this thread, as Stretchly's `skipTaskbar` break windows; returns whether it was
+/// found. Win+Down, Win+M and a taskbar click then have nothing to minimize.
+pub fn lock_window(title: &str) -> bool {
+    let Some(window) = own_window(title) else {
+        return false;
+    };
+    // SAFETY: `window` is a live window of this thread; the styles are plain bit flags.
+    unsafe {
+        let style = GetWindowLongPtrW(window, GWL_STYLE) as u32;
+        SetWindowLongPtrW(
+            window,
+            GWL_STYLE,
+            (style & !(WS_MINIMIZEBOX.0 | WS_MAXIMIZEBOX.0)) as isize,
+        );
+        let ex_style = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32;
+        SetWindowLongPtrW(
+            window,
+            GWL_EXSTYLE,
+            ((ex_style | WS_EX_TOOLWINDOW.0) & !WS_EX_APPWINDOW.0) as isize,
+        );
+        // The taskbar drops the button only when the window is shown again.
+        let _ = ShowWindow(window, SW_HIDE);
+        let _ = ShowWindow(window, SW_SHOW);
     }
     true
 }
