@@ -172,10 +172,18 @@ fn command_from_another_process_arrives_as_a_signal() {
         .spawn()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
-    while second.try_wait().unwrap().is_none() && Instant::now() < deadline {
+    let status = loop {
+        if let Some(status) = second.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = second.kill();
+            let _ = second.wait();
+            panic!("the second process did not finish in time");
+        }
         pump(Duration::from_millis(5));
-    }
-    assert!(second.wait().unwrap().success());
+    };
+    assert!(status.success());
     let received: Vec<Signal> = received.take().into_iter().map(|(s, _)| s).collect();
     assert_eq!(
         received,
