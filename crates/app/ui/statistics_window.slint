@@ -77,6 +77,12 @@ component Shoreline inherits Rectangle {
     // Weekday letters; the last is "Today".
     in property <[string]> letters;
     in property <int> streak;
+    // The still water ends below the streak text (14 px + 30 px) and above the highest
+    // wave edge less the swing (66 px − 3 px).
+    property <length> still-depth: 50px;
+    property <length> wave-height: 86px;
+    // How far the water moves up and down.
+    property <length> swing: 3px;
 
     accessible-role: text;
     accessible-label: root.streak + " day streak of days with no skipped break";
@@ -93,16 +99,28 @@ component Shoreline inherits Rectangle {
         fill: Palette.sand;
     }
     // The water laps up and down the sand every 6 seconds.
-    Path {
-        y: 3px * sin(animation-tick() / 1ms * 0.06deg);
-        width: root.width;
-        // Its edge lies over the sand's, so no gap opens while it moves.
-        height: 86px;
-        viewbox-width: 560;
-        viewbox-height: 86;
-        commands: "M 0 0 L 560 0 L 560 73 C 470 80 380 66 280 75 C 180 84 90 68 0 77 Z";
-        fill: Palette.water-deep;
-        opacity: 0.55;
+    Rectangle {
+        y: root.still-depth - 2px;
+        height: root.wave-height + 2 * root.swing - self.y;
+        clip: true;
+        Path {
+            y: root.swing * sin(animation-tick() / 1ms * 0.06deg) - parent.y;
+            width: root.width;
+            // Its edge lies over the sand's, so no gap opens while it moves.
+            height: root.wave-height;
+            viewbox-width: 560;
+            viewbox-height: 86;
+            commands: "M 0 0 L 560 0 L 560 73 C 470 80 380 66 280 75 C 180 84 90 68 0 77 Z";
+            fill: Palette.water-deep;
+            opacity: 0.55;
+        }
+    }
+    // The water under the streak text stays still: text over the moving water flickered.
+    // Opaque and drawn last, so its edge on the moving water leaves no light seam.
+    Rectangle {
+        y: 0px;
+        height: root.still-depth;
+        background: Palette.water-deep.mix(Palette.card, 0.55);
     }
     HorizontalLayout {
         x: 20px;
