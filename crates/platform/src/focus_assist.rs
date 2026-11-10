@@ -12,6 +12,23 @@ pub(crate) const WM_FOCUS_ASSIST: u32 = WM_APP + 1;
 
 const WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED: u64 = 0x0D83_063E_A3BF_1C75;
 
+/// Whether Windows reports a full-screen application or presentation.
+///
+/// # Errors
+/// Returns the Windows error when the notification state is unavailable.
+pub fn full_screen_busy() -> windows::core::Result<bool> {
+    use windows::Win32::UI::Shell::{
+        QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
+        SHQueryUserNotificationState,
+    };
+    // SAFETY: the function has no pointer arguments.
+    let state = unsafe { SHQueryUserNotificationState()? };
+    Ok(matches!(
+        state,
+        QUNS_BUSY | QUNS_PRESENTATION_MODE | QUNS_RUNNING_D3D_FULL_SCREEN
+    ))
+}
+
 type WnfCallback =
     unsafe extern "system" fn(u64, u32, *const c_void, *const c_void, *const c_void, u32) -> i32;
 

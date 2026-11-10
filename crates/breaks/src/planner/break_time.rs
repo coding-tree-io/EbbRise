@@ -115,8 +115,7 @@ mod tests {
 
     #[test]
     fn skip_shows_at_once_after_the_postpone_limit_is_used() {
-        let mut planner =
-            in_mini_break(r#","miniBreakPostpone":true,"miniBreakPostponesLimit":1"#);
+        let mut planner = in_mini_break(r#","miniBreakPostpone":true,"miniBreakPostponesLimit":1"#);
         assert!(planner.postpone(603_000));
         planner.advance(planner.deadline.unwrap());
         let start = planner.deadline.unwrap() - planner.delay;

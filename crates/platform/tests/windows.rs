@@ -14,6 +14,19 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 type Received = Rc<RefCell<Vec<(Signal, Instant)>>>;
 
+#[test]
+fn display_inventory_contains_primary_and_cursor() {
+    let inventory = platform::displays().unwrap();
+    assert!(!inventory.displays.is_empty());
+    assert_eq!(inventory.displays[0].id, inventory.primary);
+    assert!(
+        inventory
+            .displays
+            .iter()
+            .any(|display| display.id == inventory.cursor)
+    );
+}
+
 fn signal_window() -> (SignalWindow, Received) {
     let received = Received::default();
     let sink = received.clone();

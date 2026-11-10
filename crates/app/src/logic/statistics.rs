@@ -36,6 +36,37 @@ pub struct DayStatistics {
     pub daily_limit_stopped: bool,
 }
 
+/// Returns each day in the inclusive range, with empty records for missing days.
+pub fn day_range(
+    records: &[DayStatistics],
+    first: jiff::civil::Date,
+    last: jiff::civil::Date,
+) -> Vec<DayStatistics> {
+    let mut days = Vec::new();
+    let mut day = first;
+    while day <= last {
+        let key = day.to_string();
+        days.push(
+            records
+                .iter()
+                .find(|record| record.day == key)
+                .cloned()
+                .unwrap_or_else(|| DayStatistics {
+                    day: key,
+                    ..DayStatistics::default()
+                }),
+        );
+        if day == last {
+            break;
+        }
+        let Ok(next) = day.checked_add(jiff::Span::new().days(1)) else {
+            break;
+        };
+        day = next;
+    }
+    days
+}
+
 /// Today's record, and the records that wait to be saved.
 #[derive(Debug)]
 pub struct Statistics {
@@ -147,6 +178,26 @@ impl Statistics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_fills_missing_calendar_days() {
+        let saved = DayStatistics {
+            day: "2024-02-29".into(),
+            active_ms: Some(123),
+            ..DayStatistics::default()
+        };
+        let days = day_range(
+            std::slice::from_ref(&saved),
+            "2024-02-28".parse().unwrap(),
+            "2024-03-01".parse().unwrap(),
+        );
+        assert_eq!(
+            days.iter().map(|d| d.day.as_str()).collect::<Vec<_>>(),
+            ["2024-02-28", "2024-02-29", "2024-03-01"]
+        );
+        assert_eq!(days[1], saved);
+        assert_eq!(days[0].active_ms, None);
+    }
 
     #[test]
     fn events_count_into_the_kind_of_their_break() {

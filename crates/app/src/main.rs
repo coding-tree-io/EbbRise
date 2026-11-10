@@ -3,11 +3,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod break_window;
+mod environment;
 mod logging;
 mod logic;
 mod settings_window;
 mod settings_words;
 mod sounds;
+mod statistics_period;
 mod statistics_store;
 mod statistics_window;
 mod storage;
@@ -20,50 +22,19 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use breaks::until_morning;
 use commands::Command;
 use platform::{Signal, SignalWindow, awake_ms, idle_ms, sound, toast};
-use settings::Settings;
 use tracing::{error, info, warn};
 use tray_icon::menu::MenuEvent;
 use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::break_window::BreakView;
-use crate::logic::{BreakButton, Core, Effect, Environment, MenuAction, MenuEntry};
+use crate::environment::Windows;
+use crate::logic::{BreakButton, Core, Effect, MenuAction, MenuEntry};
 use crate::storage::{app_folder, load_settings, log_path, prepare_app_folder};
 use crate::tray_menu::{build_menu, tray_icon};
 
 const APP_ID: &str = "EbbRise";
-
-/// The real OS behind [`Environment`].
-struct Windows;
-
-impl Environment for Windows {
-    fn running_processes(&self) -> Option<Vec<String>> {
-        platform::running_process_names()
-            .inspect_err(|error| warn!(%error, "process list unavailable"))
-            .ok()
-    }
-
-    fn until_morning(&self, settings: &Settings) -> Option<i64> {
-        until_morning(
-            &jiff::Zoned::now(),
-            &settings.morning_hour,
-            settings.pos_latitude,
-            settings.pos_longitude,
-        )
-    }
-
-    fn day(&self) -> String {
-        use jiff::ToSpan;
-        // Civil time, so the day still starts at 04:00 on a daylight-saving change.
-        jiff::Zoned::now()
-            .datetime()
-            .checked_sub(4.hours())
-            .map(|time| time.date().to_string())
-            .unwrap_or_default()
-    }
-}
 
 struct App {
     core: Core,
@@ -85,6 +56,7 @@ struct App {
     statistics_view: Option<statistics_window::StatisticsView>,
     /// Keeps input away from other apps during a break (`blockInputDuringBreaks`).
     input_block: Option<platform::InputBlock>,
+    media: platform::MediaControl,
 }
 
 type AppAction = Box<dyn FnOnce(&mut App)>;
@@ -162,6 +134,7 @@ fn main() {
             limit_view: None,
             statistics_view: None,
             input_block: None,
+            media: platform::MediaControl::new(),
         });
     });
     with_app(App::rearm_timer_and_refresh_tray);
@@ -209,6 +182,8 @@ impl App {
                 Effect::Sound(name) => self.play(&name),
                 Effect::ShowBreak(screen) => self.open_break(screen),
                 Effect::CloseBreak => self.close_break(),
+                Effect::PauseMedia => self.media.pause(),
+                Effect::ResumeMedia => self.media.resume(),
                 Effect::OpenSettings => self.open_settings(),
                 Effect::OpenStatistics => self.open_statistics(),
                 Effect::ShowDailyLimit(limit) => self.open_daily_limit(limit),
@@ -267,7 +242,8 @@ impl App {
             }
             return info!("quit refused: a strict-mode break runs");
         }
-        self.core.on_menu(action, awake_ms(), &Windows);
+        let effects = self.core.on_menu(action, awake_ms(), &Windows);
+        self.carry_out(effects);
         self.rearm_timer_and_refresh_tray();
     }
 

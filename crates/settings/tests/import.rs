@@ -3,6 +3,19 @@
 use settings::Settings;
 
 #[test]
+fn media_and_full_screen_settings_default_and_round_trip() {
+    let defaults = Settings::default();
+    assert!(defaults.no_breaks_in_full_screen);
+    assert!(!defaults.pause_media_during_breaks);
+    let settings =
+        Settings::from_json(r#"{"noBreaksInFullScreen":false,"pauseMediaDuringBreaks":true}"#)
+            .unwrap();
+    let json = serde_json::to_value(settings).unwrap();
+    assert_eq!(json["noBreaksInFullScreen"], false);
+    assert_eq!(json["pauseMediaDuringBreaks"], true);
+}
+
+#[test]
 fn stretchly_config_keeps_defaults_for_missing_keys() {
     let settings = Settings::from_json(
         r#"{"miniBreakInterval":45000,"morningHour":"sunrise","miniBreak":false}"#,

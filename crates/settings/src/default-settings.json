@@ -563,5 +563,7 @@
   "dailyLimit": false,
   "dailyLimitTime": 14400000,
   "dailyLimitPostponeTime": 1200000,
-  "blockInputDuringBreaks": false
+  "blockInputDuringBreaks": false,
+  "noBreaksInFullScreen": true,
+  "pauseMediaDuringBreaks": false
 }

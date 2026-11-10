@@ -60,6 +60,7 @@ pub struct BreaksPlanner {
     delay: i64,
     paused: bool,
     dnd: bool,
+    full_screen: bool,
     /// Idle for longer than the natural-break reset time (upstream `isSchedulerCleared`).
     away: bool,
     exclusion: bool,
@@ -87,6 +88,7 @@ impl BreaksPlanner {
             delay: 0,
             paused: false,
             dnd: false,
+            full_screen: false,
             away: false,
             exclusion: false,
             suspended: false,
@@ -122,7 +124,7 @@ impl BreaksPlanner {
 
     /// Do Not Disturb holds breaks.
     pub fn dnd(&self) -> bool {
-        self.dnd
+        self.dnd || self.full_screen
     }
 
     /// An app exclusion rule holds breaks.
@@ -321,7 +323,7 @@ impl BreaksPlanner {
         self.delay = at - now;
         self.next = start;
         self.add_notification();
-        if self.dnd || self.exclusion || self.away {
+        if self.dnd() || self.exclusion || self.away {
             self.deadline = None;
         }
         self.hold_if_idle(now);

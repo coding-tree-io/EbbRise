@@ -5,6 +5,7 @@ mod announce;
 mod break_screen;
 mod command;
 mod menu;
+mod scheduling;
 mod settings_form;
 mod statistics;
 mod status;
@@ -22,11 +23,11 @@ use settings::Settings;
 pub use break_screen::{BreakButton, BreakScreen, countdown, ring_commands};
 pub use menu::{MenuAction, MenuEntry};
 pub use settings_form::{BreakForm, SettingsForm, UsageForm};
+#[allow(unused_imports)] // The statistics window will use this when charts are added.
+pub use statistics::day_range;
 pub use statistics::{BreakCounts, DayStatistics};
 pub use usage::DailyLimitScreen;
 
-/// How often to check for the user's return while they are away (no input event exists for that).
-const AWAY_CHECK_MS: i64 = 2_000;
 const FOCUS_ASSIST_UNSUPPORTED: i32 = -1;
 /// The sound name that means "play nothing".
 pub const SILENCE: &str = "silence";
@@ -47,6 +48,10 @@ pub enum Effect {
     ShowBreak(BreakScreen),
     /// Close the break window.
     CloseBreak,
+    /// Pause media that is playing.
+    PauseMedia,
+    /// Resume media paused at the start of the break.
+    ResumeMedia,
     /// Open the settings window (the `preferences` command).
     OpenSettings,
     /// Open the Statistics window (the `statistics` command).
@@ -68,6 +73,8 @@ pub struct Wake {
 pub trait Environment {
     /// Executable names of the running processes; `None` when Windows cannot list them.
     fn running_processes(&self) -> Option<Vec<String>>;
+    /// Whether a full-screen application or presentation is active; None on failure.
+    fn full_screen_busy(&self) -> Option<bool>;
     /// Milliseconds until the configured morning; `None` when there is no morning time.
     fn until_morning(&self, settings: &Settings) -> Option<i64>;
     /// Today as `YYYY-MM-DD`, where a day starts at 04:00 local time.
@@ -86,6 +93,8 @@ pub struct Core {
     words: Translator,
     ideas: Ideas,
     exclusion_checked_at: i64,
+    full_screen_check_at: Option<i64>,
+    media_paused: bool,
     /// Words that a `mini` or `long` command set for the next break (upstream `nextIdea`).
     next_idea: Option<command::IdeaOverride>,
     last_break: Option<LastBreak>,
@@ -105,6 +114,8 @@ impl Core {
             words,
             ideas,
             exclusion_checked_at: now,
+            full_screen_check_at: None,
+            media_paused: false,
             next_idea: None,
             last_break: None,
             usage,
@@ -135,6 +146,7 @@ impl Core {
                     effects.extend(self.carry_out(event, true));
                 }
                 effects.extend(self.check_app_exclusion(now, os));
+                self.check_full_screen(now, os);
                 effects.extend(self.run_due_steps(now));
                 effects.extend(self.check_daily_limit(now));
                 return effects;
@@ -142,9 +154,18 @@ impl Core {
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
             Signal::Resume | Signal::Unlock => self.planner.wake(now),
             Signal::FocusAssist(value) => self.planner.focus_assist(now, value),
-            Signal::Command(args) => return self.on_command(&args, now, os),
+            Signal::Command(args) => {
+                let mut effects = self.on_command(&args, now, os);
+                effects.extend(self.interrupted_media());
+                return effects;
+            }
         }
-        Vec::new()
+        self.interrupted_media().into_iter().collect()
+    }
+
+    fn interrupted_media(&mut self) -> Option<Effect> {
+        (!self.planner.in_break() && std::mem::take(&mut self.media_paused))
+            .then_some(Effect::ResumeMedia)
     }
 
     /// When the next app exclusion check is due; `None` without an active rule or while
@@ -174,21 +195,6 @@ impl Core {
             .collect()
     }
 
-    /// Several steps can be due at once, for example after a long busy period.
-    fn run_due_steps(&mut self, now: i64) -> Vec<Effect> {
-        let mut effects = Vec::new();
-        while self
-            .planner
-            .deadline()
-            .is_some_and(|deadline| deadline <= now)
-        {
-            for event in self.planner.advance(now) {
-                effects.extend(self.carry_out(event, true));
-            }
-        }
-        effects
-    }
-
     /// `on_time` is false when something other than the break's own time ended it.
     fn carry_out(&mut self, event: Event, on_time: bool) -> Vec<Effect> {
         self.usage.stats.record(&event, on_time);
@@ -204,7 +210,26 @@ impl Core {
         };
         let sound = sound(self.settings(), &event, on_time).map(Effect::Sound);
         let toast = toast(&self.words, self.settings(), &event).map(Effect::Toast);
-        toast.into_iter().chain(window).chain(sound).collect()
+        let media = match event {
+            Event::StartMiniBreak | Event::StartLongBreak
+                if self.settings().pause_media_during_breaks =>
+            {
+                self.media_paused = true;
+                Some(Effect::PauseMedia)
+            }
+            Event::FinishMiniBreak | Event::FinishLongBreak
+                if std::mem::take(&mut self.media_paused) =>
+            {
+                Some(Effect::ResumeMedia)
+            }
+            _ => None,
+        };
+        toast
+            .into_iter()
+            .chain(media)
+            .chain(window)
+            .chain(sound)
+            .collect()
     }
 
     /// The running break for the break window; `None` outside a break.
@@ -228,7 +253,11 @@ impl Core {
         if button == BreakButton::Postpone {
             self.usage.stats.postponed(time.long);
             self.planner.postpone(now);
-            return vec![Effect::CloseBreak];
+            let mut effects = vec![Effect::CloseBreak];
+            if std::mem::take(&mut self.media_paused) {
+                effects.push(Effect::ResumeMedia);
+            }
+            return effects;
         }
         match self.planner.finish_break(now) {
             Some(event) => self.carry_out(event, button == BreakButton::Finish),
@@ -261,7 +290,7 @@ impl Core {
     }
 
     /// Pause until morning pauses indefinitely when there is no morning time.
-    pub fn on_menu(&mut self, action: MenuAction, now: i64, os: &impl Environment) {
+    pub fn on_menu(&mut self, action: MenuAction, now: i64, os: &impl Environment) -> Vec<Effect> {
         match action {
             MenuAction::Resume if self.planner.paused() => self.planner.resume(now),
             MenuAction::Pause(duration) => self.planner.pause(now, duration),
@@ -282,6 +311,7 @@ impl Core {
             | MenuAction::CheckForUpdates
             | MenuAction::Quit => {}
         }
+        self.interrupted_media().into_iter().collect()
     }
 
     /// Applies settings changed in the settings window; a new language applies to new texts.
@@ -295,6 +325,10 @@ impl Core {
         let active_time_on =
             settings.count_active_time_only && !self.settings().count_active_time_only;
         self.planner.set_settings(settings, now);
+        if !self.settings().no_breaks_in_full_screen {
+            self.full_screen_check_at = None;
+            self.planner.full_screen(now, false);
+        }
         if active_time_on {
             self.sync_idle_after_settings(now);
         }
@@ -308,38 +342,6 @@ impl Core {
     /// Upstream refuses to quit during a strict-mode break.
     pub fn may_quit(&self) -> bool {
         !menu::in_strict_break(&self.planner)
-    }
-
-    /// The one timer the app needs: the earliest of the break deadline, the idle check and
-    /// the app exclusion check. On a tie the break deadline wins, with its tighter tolerance.
-    pub fn next_wake(&self, now: i64, idle: i64) -> Option<Wake> {
-        let settings = self.settings();
-        let break_due = self.planner.deadline().map(|deadline| Wake {
-            delay: deadline - now,
-            tolerance: 10,
-        });
-        let classic_natural_breaks = settings.natural_breaks && !settings.count_active_time_only;
-        let idle_check = classic_natural_breaks.then(|| {
-            let delay = if self.planner.away() {
-                AWAY_CHECK_MS
-            } else {
-                let earliest_reset_crossing = settings.natural_breaks_inactivity_reset_time - idle;
-                earliest_reset_crossing.max(1_000)
-            };
-            Wake {
-                delay,
-                tolerance: 1_000,
-            }
-        });
-        let exclusion_check = self.app_exclusion_check_due().map(|due| Wake {
-            delay: (due - now).max(0),
-            tolerance: 1_000,
-        });
-        let usage = self.usage_wake(now, idle);
-        [break_due, idle_check, exclusion_check, usage]
-            .into_iter()
-            .flatten()
-            .min_by_key(|wake| (wake.delay, wake.tolerance))
     }
 
     /// Tray tooltip and whether to show the paused icon.
@@ -364,6 +366,7 @@ mod tests {
     //! Discrete-event simulation: virtual time jumps straight to each wake-up the core asks for,
     //! so hours of app time run in microseconds. Expected times follow upstream breaksPlanner.js.
 
+    use super::scheduling::AWAY_CHECK_MS;
     use super::*;
 
     const USER_TIMER_MINIMUM_MS: i64 = 10;
@@ -399,9 +402,15 @@ mod tests {
         morning: Option<i64>,
         /// The clock has passed into the next day.
         next_day: bool,
+        full_screen: bool,
+        full_screen_reads: std::cell::Cell<usize>,
     }
 
     impl Environment for FakeOs {
+        fn full_screen_busy(&self) -> Option<bool> {
+            self.full_screen_reads.set(self.full_screen_reads.get() + 1);
+            Some(self.full_screen)
+        }
         fn running_processes(&self) -> Option<Vec<String>> {
             self.process_reads.set(self.process_reads.get() + 1);
             self.running.clone()
@@ -412,7 +421,12 @@ mod tests {
         }
 
         fn day(&self) -> String {
-            if self.next_day { "2026-11-10" } else { "2026-11-09" }.to_owned()
+            if self.next_day {
+                "2026-11-10"
+            } else {
+                "2026-11-09"
+            }
+            .to_owned()
         }
     }
 
@@ -482,6 +496,7 @@ mod tests {
                 Effect::OpenStatistics => self.log.push((self.now, "statistics".to_owned())),
                 Effect::ShowDailyLimit(limit) => self.log.push((self.now, limit.screen.kind)),
                 Effect::CloseDailyLimit => self.log.push((self.now, "limit closed".to_owned())),
+                Effect::PauseMedia | Effect::ResumeMedia => {}
             }
         }
 
@@ -519,6 +534,102 @@ mod tests {
             .iter()
             .map(|(at, title)| (*at, title.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn full_screen_is_checked_when_due_and_while_held() {
+        let mut sim = Sim::new(",\"naturalBreaks\":false");
+        sim.os.full_screen = true;
+        sim.run_until(19_000);
+        assert_eq!(sim.os.full_screen_reads.get(), 0);
+        sim.run_until(20_000);
+        assert!(sim.take_log().is_empty());
+        assert_eq!(sim.os.full_screen_reads.get(), 1);
+        sim.run_until(39_000);
+        assert!(sim.take_log().is_empty());
+        assert_eq!(sim.os.full_screen_reads.get(), 2);
+        sim.os.full_screen = false;
+        sim.run_until(40_000);
+        assert_eq!(sim.os.full_screen_reads.get(), 3);
+        assert_eq!(sim.take_log(), log(&[(40_000, "Mini break in 10 seconds")]));
+    }
+
+    #[test]
+    fn full_screen_can_hold_a_break_after_its_notification_and_can_be_disabled() {
+        let mut sim = Sim::new(",\"naturalBreaks\":false");
+        sim.run_until(20_000);
+        assert_eq!(sim.take_log(), log(&[(20_000, "Mini break in 10 seconds")]));
+        sim.os.full_screen = true;
+        sim.run_until(30_000);
+        assert!(sim.take_log().is_empty());
+        sim.os.full_screen = false;
+        sim.run_until(40_000);
+        assert_eq!(sim.take_log(), log(&[(40_000, "Mini break")]));
+
+        let mut disabled = Sim::new(",\"noBreaksInFullScreen\":false,\"naturalBreaks\":false");
+        disabled.os.full_screen = true;
+        disabled.run_until(30_000);
+        assert_eq!(
+            disabled.take_log(),
+            log(&[(20_000, "Mini break in 10 seconds"), (30_000, "Mini break")])
+        );
+        assert_eq!(disabled.os.full_screen_reads.get(), 0);
+    }
+
+    #[test]
+    fn full_screen_releases_a_long_held_break_on_the_next_check() {
+        let mut sim = Sim::new(",\"naturalBreaks\":false,\"miniBreakNotification\":false");
+        sim.os.full_screen = true;
+        sim.run_until(HOUR_MS * 3);
+        assert!(sim.take_log().is_empty());
+        sim.os.full_screen = false;
+        sim.run_until(HOUR_MS * 3 + 10_000);
+        assert_eq!(sim.take_log(), log(&[(HOUR_MS * 3 + 10_000, "Mini break")]));
+    }
+
+    #[test]
+    fn media_effects_follow_break_lifecycle() {
+        let settings = Settings::from_json(r#"{"miniBreakInterval":1000,"miniBreakDuration":1000,"miniBreakNotification":false,"longBreak":false,"naturalBreaks":false,"pauseMediaDuringBreaks":true,"noBreaksInFullScreen":false}"#).unwrap();
+        let mut core = Core::new(settings, 0, Some(0));
+        let os = FakeOs::default();
+        let start = core.on_signal(Signal::Timer, 1000, 0, &os);
+        assert!(start.contains(&Effect::PauseMedia));
+        let end = core.on_signal(Signal::Timer, 2000, 0, &os);
+        assert!(end.contains(&Effect::ResumeMedia));
+        assert!(
+            !core
+                .on_signal(Signal::Timer, 2100, 0, &os)
+                .contains(&Effect::ResumeMedia)
+        );
+    }
+
+    #[test]
+    fn media_resumes_after_postpone_skip_and_exclusion() {
+        for (button, postpone) in [(BreakButton::Postpone, true), (BreakButton::Skip, false)] {
+            let settings = Settings::from_json(&format!(r#"{{"miniBreakInterval":1000,"miniBreakDuration":10000,"miniBreakNotification":false,"longBreak":false,"naturalBreaks":false,"pauseMediaDuringBreaks":true,"miniBreakPostpone":{postpone}}}"#)).unwrap();
+            let mut core = Core::new(settings, 0, Some(0));
+            let os = FakeOs::default();
+            assert!(
+                core.on_signal(Signal::Timer, 1000, 0, &os)
+                    .contains(&Effect::PauseMedia)
+            );
+            assert!(
+                core.on_break_button(button, 1001)
+                    .contains(&Effect::ResumeMedia)
+            );
+        }
+        let settings = Settings::from_json(r#"{"miniBreakInterval":1000,"miniBreakDuration":10000,"miniBreakNotification":false,"longBreak":false,"naturalBreaks":false,"pauseMediaDuringBreaks":true,"appExclusionsCheckInterval":2000,"appExclusions":[{"rule":"pause","active":true,"commands":["meeting"]}]}"#).unwrap();
+        let mut core = Core::new(settings, 0, Some(0));
+        let mut os = FakeOs::default();
+        assert!(
+            core.on_signal(Signal::Timer, 1000, 0, &os)
+                .contains(&Effect::PauseMedia)
+        );
+        os.running = Some(vec!["meeting.exe".into()]);
+        assert!(
+            core.on_signal(Signal::Timer, 2000, 0, &os)
+                .contains(&Effect::ResumeMedia)
+        );
     }
 
     #[test]
@@ -891,7 +1002,10 @@ Next Long break in about 2 minutes"
         sim.os.next_day = true;
         sim.signal(Signal::Timer);
         let records = sim.core.statistics_to_save(sim.now);
-        let active: Vec<_> = records.iter().map(|r| (r.day.as_str(), r.active_ms)).collect();
+        let active: Vec<_> = records
+            .iter()
+            .map(|r| (r.day.as_str(), r.active_ms))
+            .collect();
         let [("2026-11-09", Some(old)), ("2026-11-10", Some(new))] = active[..] else {
             panic!("{active:?}");
         };

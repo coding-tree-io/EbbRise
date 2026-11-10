@@ -19,12 +19,37 @@ impl BreaksPlanner {
             return;
         }
         self.dnd = on;
+        self.update_hold(now, on);
+    }
+
+    /// Holds due breaks for a full-screen application or presentation.
+    pub fn full_screen(&mut self, now: i64, on: bool) {
+        if on == self.full_screen {
+            return;
+        }
+        self.full_screen = on;
+        if on {
+            self.update_hold(now, true);
+        } else if !self.paused
+            && !self.in_break()
+            && !self.dnd()
+            && !self.exclusion
+            && !self.away
+            && !self.held()
+            && self.deadline.is_none()
+            && (self.settings.mini_break || self.settings.long_break)
+        {
+            self.deadline = Some(now);
+        }
+    }
+
+    fn update_hold(&mut self, now: i64, on: bool) {
         if self.paused || self.in_break() {
             return;
         }
         if on {
             self.deadline = None;
-        } else if !self.exclusion && !self.away {
+        } else if !self.dnd() && !self.exclusion && !self.away {
             self.reset(now);
         }
     }
@@ -54,7 +79,7 @@ impl BreaksPlanner {
             }
         } else if idle_time < BACK_FROM_IDLE_MS && self.away {
             self.away = false;
-            if !self.paused && !self.dnd && !self.exclusion && !self.in_break() {
+            if !self.paused && !self.dnd() && !self.exclusion && !self.in_break() {
                 self.reset(now);
             }
         }
@@ -90,7 +115,7 @@ impl BreaksPlanner {
             self.postpones = 0;
             finished.into_iter().collect()
         } else {
-            if !self.dnd && !self.away && !self.in_break() {
+            if !self.dnd() && !self.away && !self.in_break() {
                 self.reset(now);
             }
             Vec::new()
@@ -102,7 +127,7 @@ impl BreaksPlanner {
     pub fn suspend(&mut self, now: i64) {
         if self.settings.pause_for_suspend_or_lock
             && !self.paused
-            && !self.dnd
+            && !self.dnd()
             && !self.away
             && !self.exclusion
         {

@@ -227,6 +227,10 @@ pub struct Settings {
     pub daily_limit_postpone_time: i64,
     /// During a break, keyboard and mouse input reaches only the break window (not in Stretchly).
     pub block_input_during_breaks: bool,
+    /// Hold breaks during full-screen applications and presentations.
+    pub no_breaks_in_full_screen: bool,
+    /// Pause playing media during breaks.
+    pub pause_media_during_breaks: bool,
     /// Upstream one-time autostart migration is done.
     #[serde(rename = "_migratedOpenAtLogin")]
     pub migrated_open_at_login: bool,

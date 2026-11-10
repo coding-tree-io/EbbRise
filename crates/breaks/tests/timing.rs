@@ -252,6 +252,70 @@ fn focus_assist_ignored_when_unsupported_or_not_monitored() {
 }
 
 #[test]
+fn full_screen_release_respects_other_holds_and_untouched_deadlines() {
+    let settings = Settings {
+        mini_break_interval: 100,
+        mini_break_duration: 50,
+        mini_break_notification: false,
+        long_break: false,
+        natural_breaks_inactivity_reset_time: 30_000,
+        ..exclusion("pause")
+    };
+    let mut dnd = BreaksPlanner::new(settings.clone(), 0);
+    dnd.full_screen(100, true);
+    dnd.focus_assist(101, 1);
+    dnd.full_screen(200, false);
+    assert_eq!(dnd.deadline(), None);
+    dnd.focus_assist(300, 0);
+    assert_eq!(dnd.deadline(), Some(400));
+
+    let mut excluded = BreaksPlanner::new(settings.clone(), 0);
+    excluded.full_screen(100, true);
+    excluded.processes_changed(101, &["meeting.exe"]);
+    excluded.full_screen(200, false);
+    assert_eq!(excluded.deadline(), None);
+    excluded.processes_changed(300, &[]);
+    assert_eq!(excluded.deadline(), Some(400));
+
+    let mut away = BreaksPlanner::new(settings.clone(), 0);
+    away.full_screen(100, true);
+    away.idle(30_001, 30_001);
+    away.full_screen(40_000, false);
+    assert_eq!(away.deadline(), None);
+    away.idle(50_000, 0);
+    assert_eq!(away.deadline(), Some(50_100));
+
+    let mut paused = BreaksPlanner::new(settings.clone(), 0);
+    paused.pause(10, 500);
+    paused.full_screen(100, true);
+    paused.full_screen(200, false);
+    assert_eq!(paused.deadline(), Some(510));
+
+    let mut running = BreaksPlanner::new(settings.clone(), 0);
+    assert_eq!(running.advance(100), vec![Event::StartMiniBreak]);
+    running.full_screen(110, true);
+    running.full_screen(120, false);
+    assert_eq!(running.deadline(), Some(150));
+
+    let mut untouched = BreaksPlanner::new(settings.clone(), 0);
+    untouched.full_screen(100, true);
+    untouched.skip_to_mini(150, Some(100));
+    untouched.full_screen(200, false);
+    assert_eq!(untouched.deadline(), Some(250));
+
+    let mut no_breaks = BreaksPlanner::new(
+        Settings {
+            mini_break: false,
+            ..settings
+        },
+        0,
+    );
+    no_breaks.full_screen(100, true);
+    no_breaks.full_screen(200, false);
+    assert_eq!(no_breaks.deadline(), None);
+}
+
+#[test]
 fn idle_past_reset_time_stops_breaks_until_return() {
     let settings = Settings {
         mini_break_interval: 100_000,
