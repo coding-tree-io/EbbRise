@@ -142,6 +142,11 @@ export component SettingsWindow inherits Window {
     in-out property <bool> natural-breaks;
     in-out property <bool> open-at-login;
     in-out property <bool> monitor-dnd;
+    in-out property <bool> full-screen-hold;
+    in-out property <bool> pause-media;
+    // "Show breaks on": main, mouse, all, then each display.
+    in property <[string]> displays;
+    in-out property <int> display;
     in property <[string]> languages;
     in-out property <int> language;
     // 0 follows Windows, 1 light, 2 dark, as Palette.theme.
@@ -186,9 +191,9 @@ export component SettingsWindow inherits Window {
     title: "EbbRise settings";
     icon: @image-url("icons/ebbrise.svg");
     preferred-width: 900px;
-    preferred-height: 820px;
+    preferred-height: 920px;
     min-width: 820px;
-    min-height: 760px;
+    min-height: 880px;
     background: Palette.ground;
     default-font-family: "Segoe UI Variable Text";
     default-font-size: 14px;
@@ -277,12 +282,34 @@ export component SettingsWindow inherits Window {
                     }
                 }
                 Row {
+                    title: "Show breaks on";
+                    Centre {
+                        Dropdown {
+                            label: "Show breaks on";
+                            model: root.displays;
+                            current <=> root.display;
+                            changed => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
                     title: Words.show-ideas;
                     hint: Words.show-ideas-hint;
                     Centre {
                         Switch {
                             label: Words.show-ideas;
                             checked <=> root.ideas;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "Pause media during breaks";
+                    hint: "Music and videos resume after the break";
+                    Centre {
+                        Switch {
+                            label: "Pause media during breaks";
+                            checked <=> root.pause-media;
                             toggled => { root.changed(); }
                         }
                     }
@@ -320,6 +347,17 @@ export component SettingsWindow inherits Window {
                         Switch {
                             label: Words.start-at-login;
                             checked <=> root.open-at-login;
+                            toggled => { root.changed(); }
+                        }
+                    }
+                }
+                Row {
+                    title: "No breaks in full screen";
+                    hint: "Games, videos and presentations hold the break";
+                    Centre {
+                        Switch {
+                            label: "No breaks in full screen";
+                            checked <=> root.full-screen-hold;
                             toggled => { root.changed(); }
                         }
                     }

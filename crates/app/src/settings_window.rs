@@ -97,7 +97,7 @@ impl App {
         let Some(window) = &self.settings_window else {
             return;
         };
-        let form = read_form(window, self.settings_sounds.clone());
+        let form = read_form(window, self.settings_sounds.clone(), self.core.settings());
         let changed = form.apply(self.core.settings());
         self.change_settings(changed);
     }
@@ -156,6 +156,17 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
     window.set_natural_breaks(form.natural_breaks);
     window.set_open_at_login(form.open_at_login);
     window.set_monitor_dnd(form.monitor_dnd);
+    window.set_full_screen_hold(form.no_breaks_in_full_screen);
+    window.set_pause_media(form.pause_media);
+    let sizes = display_sizes();
+    let (choices, choice) = display_choices(&sizes, &form.screen, form.all_screens);
+    window.set_displays(ModelRc::new(VecModel::from(
+        choices
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+    window.set_display(choice as i32);
     window.set_language(form.language as i32);
     window.set_theme(form.theme as i32);
     window.set_mini_on(form.mini.on);
@@ -188,9 +199,14 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
     window.set_volume(form.volume as i32);
 }
 
-fn read_form(window: &SettingsWindow, sounds: Vec<String>) -> SettingsForm {
+fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) -> SettingsForm {
     let index = |value: i32| usize::try_from(value).unwrap_or(0);
+    let (screen, all_screens) = display_setting(index(window.get_display()), &before.screen);
     SettingsForm {
+        no_breaks_in_full_screen: window.get_full_screen_hold(),
+        pause_media: window.get_pause_media(),
+        screen,
+        all_screens,
         fullscreen: window.get_fullscreen(),
         ideas: window.get_ideas(),
         natural_breaks: window.get_natural_breaks(),
@@ -230,6 +246,54 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>) -> SettingsForm {
     }
 }
 
+/// The fixed entries of the "Show breaks on" list; displays follow them.
+const DISPLAY_CHOICES: [&str; 3] = ["Main display", "Display with the mouse", "All displays"];
+
+/// Width and height of each connected display; empty when Windows does not list them.
+fn display_sizes() -> Vec<(i64, i64)> {
+    platform::displays()
+        .map(|found| {
+            found
+                .displays
+                .iter()
+                .map(|d| (d.bounds.width, d.bounds.height))
+                .collect()
+        })
+        .unwrap_or_else(|error| {
+            warn!(%error, "displays not listed");
+            Vec::new()
+        })
+}
+
+/// The list entries and the chosen one for Stretchly's `screen` and `allScreens`. A saved
+/// display that is not connected now keeps an entry, so opening the window changes nothing.
+fn display_choices(sizes: &[(i64, i64)], screen: &str, all_screens: bool) -> (Vec<String>, usize) {
+    let saved = screen.parse::<usize>().ok();
+    let count = sizes.len().max(saved.map_or(0, |i| i + 1));
+    let mut choices: Vec<String> = DISPLAY_CHOICES.map(str::to_owned).into();
+    choices.extend((0..count).map(|i| match sizes.get(i) {
+        Some((width, height)) => format!("Display {} ({width} × {height})", i + 1),
+        None => format!("Display {} (not connected)", i + 1),
+    }));
+    let choice = match (all_screens, screen, saved) {
+        (true, ..) => 2,
+        (_, "cursor", _) => 1,
+        (_, _, Some(i)) => DISPLAY_CHOICES.len() + i,
+        _ => 0,
+    };
+    (choices, choice)
+}
+
+/// Stretchly's `screen` and `allScreens` for a list entry; "All displays" keeps `screen`.
+fn display_setting(choice: usize, screen: &str) -> (String, bool) {
+    match choice {
+        0 => ("primary".to_owned(), false),
+        1 => ("cursor".to_owned(), false),
+        2 => (screen.to_owned(), true),
+        n => ((n - DISPLAY_CHOICES.len()).to_string(), false),
+    }
+}
+
 /// Colours the settings title bar for the palette mode.
 fn colour_title_bar(dark: bool) {
     if !platform::title_bar(TITLE, dark, GROUND[usize::from(!dark)]) {
@@ -244,5 +308,26 @@ fn open(target: Option<&Path>) {
     };
     if let Err(error) = std::process::Command::new("explorer").arg(target).spawn() {
         warn!(%error, "could not open {}", target.display());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_display_choice_reads_back_as_itself() {
+        let sizes = [(2560, 1440), (1920, 1080)];
+        let (choices, _) = display_choices(&sizes, "primary", false);
+        assert_eq!(choices[4], "Display 2 (1920 × 1080)");
+        for choice in 0..choices.len() {
+            let (screen, all) = display_setting(choice, "1");
+            assert_eq!(display_choices(&sizes, &screen, all).1, choice);
+        }
+        let (choices, choice) = display_choices(&sizes[..1], "2", false);
+        assert_eq!(
+            (choices[5].as_str(), choice),
+            ("Display 3 (not connected)", 5)
+        );
     }
 }

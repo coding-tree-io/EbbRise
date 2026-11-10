@@ -46,7 +46,9 @@ Parity note: ps-list on Windows returns process names, not command lines. Name-o
 | Global shortcuts (8 configurable, plus end-break) | `globalShortcut` | Not ported (decided 2026-11-09) |
 | Autostart | `app.setLoginItemSettings`; Store build uses StartupTask | `HKCU\...\Run` value `EbbRise`, synced with `openAtLogin` at every start as upstream; MSIX `StartupTask` if we ship MSIX |
 | Single instance + CLI commands | `requestSingleInstanceLock`, `second-instance` argv | Named mutex + WM_COPYDATA to the hidden signal window |
-| Break windows on all/primary/cursor display, top-most, not focusable, kiosk/fullscreen | `BrowserWindow` per display | Window placement and z-order rules belong to the core/UI contract; drawing belongs to the UI host |
+| Break windows on all/primary/cursor display, top-most, not focusable, kiosk/fullscreen | `BrowserWindow` per display | One Slint window per target display (`EnumDisplayMonitors`, `screen` and `allScreens` as upstream), top-most, no taskbar button, no minimize; the first takes keyboard focus |
+| Hold breaks in full screen (not in Stretchly) | none | `SHQueryUserNotificationState` checked when a break is due, then every 10 s while held; `noBreaksInFullScreen` |
+| Pause media during breaks (not in Stretchly) | none | System Media Transport Controls: pause playing sessions at break start, resume the same ones after; `pauseMediaDuringBreaks` |
 | Logs | `electron-log` | `tracing` to `%APPDATA%\EbbRise\logs\main.log`, moved to `main.old.log` past 1 MB at start, as electron-log |
 | Open URL / folder | `shell.openExternal` | `ShellExecuteW` |
 

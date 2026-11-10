@@ -38,6 +38,11 @@ pub struct SettingsForm {
     pub natural_breaks: bool,
     pub open_at_login: bool,
     pub monitor_dnd: bool,
+    pub no_breaks_in_full_screen: bool,
+    pub pause_media: bool,
+    /// Stretchly's `screen`: "primary", "cursor" or a display index.
+    pub screen: String,
+    pub all_screens: bool,
     /// Index into [`LANGUAGES`].
     pub language: usize,
     /// Index into [`THEMES`]: follow Windows, light or dark.
@@ -83,6 +88,10 @@ impl SettingsForm {
             natural_breaks: s.natural_breaks,
             open_at_login: s.open_at_login,
             monitor_dnd: s.monitor_dnd,
+            no_breaks_in_full_screen: s.no_breaks_in_full_screen,
+            pause_media: s.pause_media_during_breaks,
+            screen: s.screen.clone(),
+            all_screens: s.all_screens,
             language: language(&s.language)
                 .or_else(|| language("en"))
                 .unwrap_or(0),
@@ -146,6 +155,12 @@ impl SettingsForm {
         }
         if self.monitor_dnd != before.monitor_dnd {
             s.monitor_dnd = self.monitor_dnd;
+        }
+        s.no_breaks_in_full_screen = self.no_breaks_in_full_screen;
+        s.pause_media_during_breaks = self.pause_media;
+        s.all_screens = self.all_screens;
+        if self.screen != before.screen {
+            s.screen = self.screen.clone();
         }
         if self.language != before.language {
             s.language = LANGUAGES[self.language].0.to_owned();

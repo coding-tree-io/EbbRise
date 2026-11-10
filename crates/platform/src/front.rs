@@ -5,8 +5,8 @@ use windows::Win32::System::Threading::AttachThreadInput;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, EnumThreadWindows, GetForegroundWindow, GetWindowTextW,
-    GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, GetWindowThreadProcessId, SW_HIDE, SW_SHOW,
+    BringWindowToTop, EnumThreadWindows, GWL_EXSTYLE, GWL_STYLE, GetForegroundWindow,
+    GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, SW_HIDE, SW_SHOW,
     SetForegroundWindow, SetWindowLongPtrW, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
     WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
 };
@@ -18,7 +18,7 @@ use windows::core::BOOL;
 /// Windows refuses the foreground to a background app, so this joins the input of the
 /// current foreground window's thread for the call, the usual way around that rule.
 pub fn bring_to_front(title: &str) -> bool {
-    let Some(window) = own_window(title) else {
+    let Some(&window) = own_windows(title).first() else {
         return false;
     };
     // SAFETY: `window` is a live window of this thread; the thread ids come from Windows.
@@ -38,13 +38,19 @@ pub fn bring_to_front(title: &str) -> bool {
     true
 }
 
-/// Takes the minimize and maximize styles and the taskbar button from the window titled
-/// `title` on this thread, as Stretchly's `skipTaskbar` break windows; returns whether it was
-/// found. Win+Down, Win+M and a taskbar click then have nothing to minimize.
+/// Takes the minimize and maximize styles and the taskbar button from every window titled
+/// `title` on this thread (one break window per display), as Stretchly's `skipTaskbar` break
+/// windows; returns whether one was found. Win+Down, Win+M and a taskbar click then have
+/// nothing to minimize.
 pub fn lock_window(title: &str) -> bool {
-    let Some(window) = own_window(title) else {
-        return false;
-    };
+    let windows = own_windows(title);
+    for &window in &windows {
+        lock(window);
+    }
+    !windows.is_empty()
+}
+
+fn lock(window: HWND) {
     // SAFETY: `window` is a live window of this thread; the styles are plain bit flags.
     unsafe {
         let style = GetWindowLongPtrW(window, GWL_STYLE) as u32;
@@ -63,30 +69,29 @@ pub fn lock_window(title: &str) -> bool {
         let _ = ShowWindow(window, SW_HIDE);
         let _ = ShowWindow(window, SW_SHOW);
     }
-    true
 }
 
-/// The top-level window of this thread titled `title`; another app's window never matches.
-fn own_window(title: &str) -> Option<HWND> {
+/// The top-level windows of this thread titled `title`, in z-order; another app's window
+/// never matches.
+fn own_windows(title: &str) -> Vec<HWND> {
     struct Search {
         title: Vec<u16>,
-        found: Option<HWND>,
+        found: Vec<HWND>,
     }
     unsafe extern "system" fn visit(window: HWND, search: LPARAM) -> BOOL {
-        // SAFETY: `search` is the `Search` that `own_window` passes and keeps alive.
+        // SAFETY: `search` is the `Search` that `own_windows` passes and keeps alive.
         let search = unsafe { &mut *(search.0 as *mut Search) };
         let mut text = [0u16; 256];
         // SAFETY: `text` is a writable buffer of the length the call is given.
         let length = unsafe { GetWindowTextW(window, &mut text) } as usize;
         if text[..length] == search.title[..] {
-            search.found = Some(window);
-            return false.into();
+            search.found.push(window);
         }
         true.into()
     }
     let mut search = Search {
         title: title.encode_utf16().collect(),
-        found: None,
+        found: Vec::new(),
     };
     // SAFETY: `visit` reads `search` only during this call, while it is alive.
     let _ = unsafe {

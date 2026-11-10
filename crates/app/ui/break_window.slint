@@ -11,6 +11,8 @@ export component BreakWindow inherits Window {
     in property <string> caption;
     // SVG path commands for the arc of time left, in the ring's 236 × 236 view box.
     in property <string> ring;
+    // Share of the break passed, 0 to 1: the water level in the ring (design R1).
+    in property <float> passed;
     in property <string> postpone-label;
     in property <string> skip-label;
     in property <string> finish-label;
@@ -48,6 +50,32 @@ export component BreakWindow inherits Window {
             Rectangle {
                 width: 236px;
                 height: 236px;
+                // The water rises inside the ring as the break passes; two wave layers slide
+                // in opposite directions. Three 138 px wavelengths cover the 198 px circle.
+                if root.passed > 0: Rectangle {
+                    x: 19px;
+                    y: 19px;
+                    width: 198px;
+                    height: 198px;
+                    border-radius: 99px;
+                    clip: true;
+                    for layer in [
+                        { drift: 1, depth: 0px, opacity: 0.55 },
+                        { drift: -0.8, depth: 3px, opacity: 0.5 },
+                    ]: Path {
+                        property <float> shift: Math.mod(animation-tick() / 1ms * 0.022 * abs(layer.drift), 138);
+                        x: (layer.drift > 0 ? -self.shift : self.shift - 138) * 1px;
+                        y: (1 - root.passed) * 198px - 6px + layer.depth;
+                        width: 414px;
+                        height: 240px;
+                        viewbox-width: 414;
+                        viewbox-height: 240;
+                        commands: "M 0 6 C 23 -2 46 -2 69 6 C 92 14 115 14 138 6 C 161 -2 184 -2 207 6 C 230 14 253 14 276 6 C 299 -2 322 -2 345 6 C 368 14 391 14 414 6 L 414 240 L 0 240 Z";
+                        fill: @linear-gradient(180deg, Palette.water-top 0%, Palette.water-deep 100%);
+                        opacity: layer.opacity;
+                        animate y { duration: 1000ms; }
+                    }
+                }
                 Path {
                     width: 236px;
                     height: 236px;

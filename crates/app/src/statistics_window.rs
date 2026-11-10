@@ -1,15 +1,21 @@
-//! The Statistics window (concept D4-A): one day at a time, from `statistics.json` and today's
-//! live record.
+//! The Statistics window: one day (concept D4-A), or a week or month chart (design C2), from
+//! `statistics.json` and today's live record, under the shoreline of the last 14 days (P2).
 
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, ModelRc, Timer, VecModel};
+use jiff::ToSpan;
+use jiff::civil::Date;
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 use tracing::warn;
 
-use crate::logic::{BreakCounts, DayStatistics};
+use crate::logic::{BreakCounts, DayStatistics, day_range};
 use crate::settings_window::GROUND;
-use crate::ui::{Palette, StatisticsWindow};
+use crate::statistics_period::{
+    Range, SHORE_DAYS, active_time, chart_bar, completed, daily_limit, day_label, period_label,
+    shore_state, streak, taken_and_skipped, top_hours, weekday_letter,
+};
+use crate::ui::{ChartBar, Palette, StatisticsWindow};
 use crate::{App, statistics_store, with_app};
 
 const TITLE: &str = "EbbRise statistics";
@@ -18,7 +24,11 @@ pub(crate) struct StatisticsView {
     window: StatisticsWindow,
     /// Every recorded day, oldest first; the last one is today.
     days: Vec<DayStatistics>,
-    shown: usize,
+    range: Range,
+    /// A day in the period shown; in the Day view, a recorded day.
+    anchor: Date,
+    /// The daily limit, hours; 0 when it is off.
+    limit_hours: f32,
 }
 
 impl App {
@@ -26,9 +36,11 @@ impl App {
     /// today's counts.
     pub(crate) fn open_statistics(&mut self) {
         let days = self.statistics_days();
+        let limit_hours = self.daily_limit_hours();
         if let Some(view) = &mut self.statistics_view {
-            view.shown = days.len() - 1;
             view.days = days;
+            view.anchor = view.today();
+            view.limit_hours = limit_hours;
             view.fill();
             let _ = view.window.show();
             return;
@@ -40,18 +52,22 @@ impl App {
         window
             .global::<Palette>()
             .set_theme(crate::ui::theme(self.core.settings()));
-        window.on_back(|| with_app(|app| app.move_statistics_day(-1)));
-        window.on_forward(|| with_app(|app| app.move_statistics_day(1)));
+        window.on_back(|| with_app(|app| app.move_statistics(-1)));
+        window.on_forward(|| with_app(|app| app.move_statistics(1)));
+        window.on_range_changed(|index| with_app(move |app| app.change_statistics_range(index)));
         window.on_dark_mode_changed(colour_title_bar);
         window.window().on_close_requested(|| {
             with_app(App::close_statistics);
             slint::CloseRequestResponse::HideWindow
         });
-        let view = StatisticsView {
-            shown: days.len() - 1,
+        let mut view = StatisticsView {
             window,
             days,
+            range: Range::Day,
+            anchor: Date::default(),
+            limit_hours,
         };
+        view.anchor = view.today();
         view.fill();
         if let Err(error) = view.window.show() {
             warn!(%error, "statistics window not shown");
@@ -73,6 +89,15 @@ impl App {
         days
     }
 
+    fn daily_limit_hours(&self) -> f32 {
+        let settings = self.core.settings();
+        if settings.daily_limit {
+            settings.daily_limit_time as f32 / 3_600_000.0
+        } else {
+            0.0
+        }
+    }
+
     /// Frees the window after this event, as the settings window is.
     fn close_statistics(&mut self) {
         if let Some(view) = self.statistics_view.take() {
@@ -80,24 +105,116 @@ impl App {
         }
     }
 
-    fn move_statistics_day(&mut self, step: isize) {
+    fn move_statistics(&mut self, step: i64) {
         if let Some(view) = &mut self.statistics_view {
-            view.shown = view
-                .shown
-                .saturating_add_signed(step)
-                .min(view.days.len() - 1);
+            view.anchor = match view.range {
+                // The Day view moves between recorded days only.
+                Range::Day => {
+                    let shown = view.shown_index();
+                    let next = shown.saturating_add_signed(step as isize);
+                    view.date(next.min(view.days.len() - 1))
+                }
+                range => range.step(view.anchor, step).min(view.today()),
+            };
+            view.fill();
+        }
+    }
+
+    fn change_statistics_range(&mut self, index: i32) {
+        if let Some(view) = &mut self.statistics_view {
+            view.range = Range::from_index(index);
+            if view.range == Range::Day {
+                view.anchor = view.date(view.shown_index());
+            }
             view.fill();
         }
     }
 }
 
 impl StatisticsView {
+    fn date(&self, index: usize) -> Date {
+        self.days[index].day.parse().unwrap_or_default()
+    }
+
+    fn today(&self) -> Date {
+        self.date(self.days.len() - 1)
+    }
+
+    /// The last recorded day on or before the anchor.
+    fn shown_index(&self) -> usize {
+        let anchor = self.anchor.to_string();
+        self.days
+            .iter()
+            .rposition(|day| day.day <= anchor)
+            .unwrap_or(0)
+    }
+
     fn fill(&self) {
         let window = &self.window;
-        let day = &self.days[self.shown];
-        let today = self.shown + 1 == self.days.len();
+        let today = self.today();
+        window.set_range(self.range.index());
+        let shore = day_range(
+            &self.days,
+            today.saturating_sub((SHORE_DAYS - 1).days()),
+            today,
+        );
+        window.set_shore(model(shore.iter().map(|day| shore_state(day) as i32)));
+        window.set_shore_letters(model(shore.iter().map(|day| {
+            SharedString::from(if day.day == today.to_string() {
+                "Today".to_owned()
+            } else {
+                weekday_letter(&day.day)
+            })
+        })));
+        window.set_streak(streak(&self.days) as i32);
+        if self.range == Range::Day {
+            return self.fill_day();
+        }
+        let (first, last) = self.range.period(self.anchor);
+        let earliest = self.date(0);
+        window.set_day(period_label(self.range, first, last).into());
+        window.set_can_go_back(first > earliest);
+        window.set_can_go_forward(last < today);
+        let days = day_range(&self.days, first, last);
+        let measured: Vec<i64> = days.iter().filter_map(|day| day.active_ms).collect();
+        window.set_active_time(if measured.is_empty() {
+            "Not measured".to_owned().into()
+        } else {
+            active_time(Some(measured.iter().sum())).into()
+        });
+        let (taken, skipped) = days
+            .iter()
+            .map(taken_and_skipped)
+            .fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+        window.set_taken_share(
+            match taken + skipped {
+                0 => "No breaks".to_owned(),
+                all => format!("{} %", (taken * 100 + all / 2) / all),
+            }
+            .into(),
+        );
+        window.set_skipped(skipped.to_string().into());
+        let bars: Vec<ChartBar> = days
+            .iter()
+            .enumerate()
+            .map(|(i, day)| chart_bar(self.range, day, i, days.len()))
+            .collect();
+        let most = bars
+            .iter()
+            .map(|bar| bar.hours)
+            .fold(self.limit_hours, f32::max);
+        window.set_top_hours(top_hours(most));
+        window.set_limit_hours(self.limit_hours);
+        window.set_bars(ModelRc::from(Rc::new(VecModel::from(bars))));
+    }
+
+    fn fill_day(&self) {
+        let window = &self.window;
+        let shown = self.shown_index();
+        let day = &self.days[shown];
+        let today = shown + 1 == self.days.len();
         window.set_day(day_label(&day.day, today).into());
-        window.set_can_go_back(self.shown > 0);
+        window.set_can_go_back(shown > 0);
         window.set_can_go_forward(!today);
         window.set_active_time(active_time(day.active_ms).into());
         window.set_completed(completed(day).into());
@@ -105,6 +222,10 @@ impl StatisticsView {
         window.set_long(counts(&day.long));
         window.set_daily_limit(daily_limit(day).into());
     }
+}
+
+fn model<T: Clone + 'static>(items: impl Iterator<Item = T>) -> ModelRc<T> {
+    ModelRc::from(Rc::new(VecModel::from(items.collect::<Vec<_>>())))
 }
 
 fn counts(counts: &BreakCounts) -> ModelRc<i32> {
@@ -115,82 +236,11 @@ fn counts(counts: &BreakCounts) -> ModelRc<i32> {
         counts.skipped,
         counts.postponed,
     ];
-    let values: Vec<i32> = values
-        .iter()
-        .map(|&n| i32::try_from(n).unwrap_or(i32::MAX))
-        .collect();
-    ModelRc::from(Rc::new(VecModel::from(values)))
-}
-
-/// "Today", or the date such as "Sun 8 Nov 2026".
-fn day_label(day: &str, today: bool) -> String {
-    if today {
-        return "Today".to_owned();
-    }
-    day.parse::<jiff::civil::Date>()
-        .map(|date| date.strftime("%a %-d %b %Y").to_string())
-        .unwrap_or_else(|_| day.to_owned())
-}
-
-/// "5 h 12 min", or "Not measured" when neither active-time feature was on.
-fn active_time(active_ms: Option<i64>) -> String {
-    let Some(ms) = active_ms else {
-        return "Not measured".to_owned();
-    };
-    let minutes = ms / 60_000;
-    match (minutes / 60, minutes % 60) {
-        (0, minutes) => format!("{minutes} min"),
-        (hours, minutes) => format!("{hours} h {minutes} min"),
-    }
-}
-
-/// "14 of 18": completed breaks of the breaks shown.
-fn completed(day: &DayStatistics) -> String {
-    let shown = day.mini.shown + day.long.shown;
-    let done = day.mini.completed + day.long.completed;
-    format!("{done} of {shown}")
-}
-
-/// The daily-limit line; empty when no reminder came.
-fn daily_limit(day: &DayStatistics) -> String {
-    match (day.daily_limit_shown, day.daily_limit_stopped) {
-        (0, _) => String::new(),
-        (1, false) => "Daily limit: 1 reminder.".to_owned(),
-        (1, true) => "Daily limit: 1 reminder; you stopped for the day.".to_owned(),
-        (n, false) => format!("Daily limit: {n} reminders."),
-        (n, true) => format!("Daily limit: {n} reminders; you stopped for the day."),
-    }
+    model(values.iter().map(|&n| i32::try_from(n).unwrap_or(i32::MAX)))
 }
 
 fn colour_title_bar(dark: bool) {
     if !platform::title_bar(TITLE, dark, GROUND[usize::from(!dark)]) {
         warn!("statistics title bar not coloured");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn labels_read_naturally() {
-        assert_eq!(day_label("2026-11-08", false), "Sun 8 Nov 2026");
-        assert_eq!(day_label("2026-11-09", true), "Today");
-        assert_eq!(active_time(None), "Not measured");
-        assert_eq!(active_time(Some(18_720_000)), "5 h 12 min");
-        assert_eq!(active_time(Some(59_000)), "0 min");
-        let mut day = DayStatistics::default();
-        day.mini.shown = 15;
-        day.mini.completed = 12;
-        day.long.shown = 3;
-        day.long.completed = 2;
-        assert_eq!(completed(&day), "14 of 18");
-        assert_eq!(daily_limit(&day), "");
-        day.daily_limit_shown = 2;
-        day.daily_limit_stopped = true;
-        assert_eq!(
-            daily_limit(&day),
-            "Daily limit: 2 reminders; you stopped for the day."
-        );
     }
 }
