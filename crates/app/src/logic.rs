@@ -279,6 +279,7 @@ impl Core {
             | MenuAction::Preferences
             | MenuAction::Statistics
             | MenuAction::DownloadUpdate
+            | MenuAction::CheckForUpdates
             | MenuAction::Quit => {}
         }
     }

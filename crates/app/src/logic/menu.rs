@@ -23,6 +23,8 @@ pub enum MenuAction {
     Statistics,
     /// Open the latest release page (upstream's "Download latest version").
     DownloadUpdate,
+    /// Check for a newer release now and report the result.
+    CheckForUpdates,
     Quit,
 }
 
@@ -42,6 +44,7 @@ impl MenuAction {
             Self::Preferences => "preferences",
             Self::Statistics => "statistics",
             Self::DownloadUpdate => "download-update",
+            Self::CheckForUpdates => "check-updates",
             Self::Quit => "quit",
         };
         id.to_owned()
@@ -61,6 +64,7 @@ impl MenuAction {
             Self::Preferences,
             Self::Statistics,
             Self::DownloadUpdate,
+            Self::CheckForUpdates,
             Self::Quit,
         ]
         .into_iter()
@@ -136,13 +140,27 @@ pub(super) fn tray_menu(planner: &BreaksPlanner, words: &Translator, now: i64) -
         menu.push(item(MenuAction::Reset, "main.resetBreaks"));
     }
     menu.push(MenuEntry::Separator);
-    menu.push(MenuEntry::Item {
-        label: "Statistics".to_owned(),
-        action: MenuAction::Statistics,
-    });
-    menu.push(item(MenuAction::Preferences, "main.preferences"));
-    menu.push(item(MenuAction::Quit, "main.quitStretchly"));
+    menu.extend(app_entries(words));
     menu
+}
+
+/// The entries at the end of every tray menu. Statistics and the update check have no
+/// translations yet.
+fn app_entries(words: &Translator) -> [MenuEntry; 4] {
+    let english = |action, label: &str| MenuEntry::Item {
+        label: label.to_owned(),
+        action,
+    };
+    let item = |action, key: &str| MenuEntry::Item {
+        label: words.text(key),
+        action,
+    };
+    [
+        english(MenuAction::Statistics, "Statistics"),
+        english(MenuAction::CheckForUpdates, "Check for updates"),
+        item(MenuAction::Preferences, "main.preferences"),
+        item(MenuAction::Quit, "main.quitStretchly"),
+    ]
 }
 
 /// "30 minutes" or "2 hours" (upstream `pauseMenu`).
@@ -204,6 +222,7 @@ mod tests {
                 "Reset breaks",
                 "-",
                 "Statistics",
+                "Check for updates",
                 "Preferences",
                 "Quit EbbRise",
             ]
@@ -217,6 +236,7 @@ mod tests {
                 "Resume breaks",
                 "-",
                 "Statistics",
+                "Check for updates",
                 "Preferences",
                 "Quit EbbRise"
             ]
@@ -248,6 +268,8 @@ mod tests {
             MenuAction::Reset,
             MenuAction::Preferences,
             MenuAction::Statistics,
+            MenuAction::DownloadUpdate,
+            MenuAction::CheckForUpdates,
             MenuAction::Quit,
         ];
         for action in actions {

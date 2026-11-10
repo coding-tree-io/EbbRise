@@ -257,6 +257,9 @@ impl App {
         if action == MenuAction::Statistics {
             return self.open_statistics();
         }
+        if action == MenuAction::CheckForUpdates {
+            return update::check_now();
+        }
         if action == MenuAction::Quit {
             if self.core.may_quit() {
                 self.save_today_statistics();

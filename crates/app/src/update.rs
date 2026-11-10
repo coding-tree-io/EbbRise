@@ -1,6 +1,7 @@
 //! The update check, as upstream's `checkVersion`: shortly after start and then every 48
 //! hours, read the latest release tag on GitHub. A newer one adds "Download latest version"
 //! to the top of the tray menu and, when `notifyNewVersion` is on, shows a notification.
+//! "Check for updates" in the tray menu checks at once and always reports the result.
 
 use std::time::Duration;
 
@@ -27,14 +28,23 @@ fn check() {
     with_app(|app| {
         if app.core.settings().check_new_version {
             // WinHTTP blocks, so the request runs on its own thread and reports back.
-            std::thread::spawn(fetch_and_report);
+            std::thread::spawn(|| fetch_and_report(false));
         }
     });
 }
 
-fn fetch_and_report() {
-    if let Some(tag) = latest_tag() {
-        let _ = slint::invoke_from_event_loop(move || with_app(move |app| app.on_latest_tag(&tag)));
+/// Checks now, whatever `checkNewVersion` says, and reports the result in a notification.
+pub(crate) fn check_now() {
+    std::thread::spawn(|| fetch_and_report(true));
+}
+
+/// `manual`: the user asked, so "up to date" and a failed check are reported too.
+fn fetch_and_report(manual: bool) {
+    let tag = latest_tag();
+    if tag.is_some() || manual {
+        let _ = slint::invoke_from_event_loop(move || {
+            with_app(move |app| app.on_latest_tag(tag.as_deref(), manual));
+        });
     }
 }
 
@@ -57,21 +67,38 @@ fn latest_tag() -> Option<String> {
 }
 
 impl App {
-    fn on_latest_tag(&mut self, tag: &str) {
-        if !newer(env!("CARGO_PKG_VERSION"), tag) || self.new_version.as_deref() == Some(tag) {
+    fn on_latest_tag(&mut self, tag: Option<&str>, manual: bool) {
+        let current = env!("CARGO_PKG_VERSION");
+        let Some(tag) = tag.filter(|tag| newer(current, tag)) else {
+            let title = match tag {
+                Some(_) => "EbbRise is up to date",
+                None => "Could not check for updates",
+            };
+            if manual {
+                self.notify(title, &format!("Version {current}"));
+            }
+            return;
+        };
+        let known = self.new_version.as_deref() == Some(tag);
+        if known && !manual {
             return;
         }
         info!(tag, "new version");
         self.new_version = Some(tag.to_owned());
-        if self.core.settings().notify_new_version {
-            platform::toast::show(
-                APP_ID,
-                &self.core.words().text("process.newVersionAvailable"),
-                tag,
-                self.core.settings().silent_notifications,
-            );
+        if manual || self.core.settings().notify_new_version {
+            self.notify(&self.core.words().text("process.newVersionAvailable"), tag);
         }
         self.refresh_tray();
+    }
+
+    fn notify(&self, title: &str, text: &str) {
+        info!(title, "toast");
+        platform::toast::show(
+            APP_ID,
+            title,
+            text,
+            self.core.settings().silent_notifications,
+        );
     }
 
     /// The menu entries above the usual tray menu: the download item once a newer
