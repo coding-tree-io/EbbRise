@@ -5,6 +5,7 @@
 mod autostart;
 mod clock;
 mod focus_assist;
+mod front;
 mod http;
 mod input_block;
 mod instance;
@@ -17,6 +18,7 @@ pub mod toast;
 
 pub use autostart::{autostart_command, set_autostart};
 pub use clock::{awake_ms, idle_ms};
+pub use front::bring_to_front;
 pub use http::https_get;
 pub use input_block::InputBlock;
 pub use instance::{attach_parent_console, is_first_instance};

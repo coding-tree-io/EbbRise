@@ -28,6 +28,7 @@ impl BreakView {
         window
             .global::<Palette>()
             .set_theme(crate::ui::theme(settings));
+        let title = screen.kind.clone();
         window.set_kind(screen.kind.into());
         window.set_headline(screen.headline.into());
         window.set_detail(screen.detail.into());
@@ -44,6 +45,12 @@ impl BreakView {
         window.on_finish(press(BreakButton::Finish));
         place(&window, settings);
         window.show()?;
+        // Always-on-top alone leaves the keyboard with the app behind; the break takes it.
+        Timer::single_shot(Duration::from_millis(50), move || {
+            if !platform::bring_to_front(&title) {
+                tracing::warn!(title, "break window not brought to the front");
+            }
+        });
         let tick = Timer::default();
         tick.start(TimerMode::Repeated, Duration::from_secs(1), on_tick);
         Ok(Self {

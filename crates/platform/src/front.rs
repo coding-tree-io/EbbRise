@@ -1,0 +1,70 @@
+//! Brings a window of this app to the front with keyboard focus.
+
+use windows::Win32::Foundation::{HWND, LPARAM};
+use windows::Win32::System::Threading::AttachThreadInput;
+use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+use windows::Win32::UI::WindowsAndMessaging::{
+    BringWindowToTop, EnumThreadWindows, GetForegroundWindow, GetWindowTextW,
+    GetWindowThreadProcessId, SetForegroundWindow,
+};
+use windows::core::BOOL;
+
+/// Gives the window titled `title` on this thread the foreground and keyboard focus; returns
+/// whether such a window was found.
+///
+/// Windows refuses the foreground to a background app, so this joins the input of the
+/// current foreground window's thread for the call, the usual way around that rule.
+pub fn bring_to_front(title: &str) -> bool {
+    let Some(window) = own_window(title) else {
+        return false;
+    };
+    // SAFETY: `window` is a live window of this thread; the thread ids come from Windows.
+    unsafe {
+        let own_thread = GetCurrentThreadId();
+        let foreground_thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        let joined = foreground_thread != 0
+            && foreground_thread != own_thread
+            && AttachThreadInput(own_thread, foreground_thread, true).as_bool();
+        let _ = BringWindowToTop(window);
+        let _ = SetForegroundWindow(window);
+        let _ = SetFocus(Some(window));
+        if joined {
+            let _ = AttachThreadInput(own_thread, foreground_thread, false);
+        }
+    }
+    true
+}
+
+/// The top-level window of this thread titled `title`; another app's window never matches.
+fn own_window(title: &str) -> Option<HWND> {
+    struct Search {
+        title: Vec<u16>,
+        found: Option<HWND>,
+    }
+    unsafe extern "system" fn visit(window: HWND, search: LPARAM) -> BOOL {
+        // SAFETY: `search` is the `Search` that `own_window` passes and keeps alive.
+        let search = unsafe { &mut *(search.0 as *mut Search) };
+        let mut text = [0u16; 256];
+        // SAFETY: `text` is a writable buffer of the length the call is given.
+        let length = unsafe { GetWindowTextW(window, &mut text) } as usize;
+        if text[..length] == search.title[..] {
+            search.found = Some(window);
+            return false.into();
+        }
+        true.into()
+    }
+    let mut search = Search {
+        title: title.encode_utf16().collect(),
+        found: None,
+    };
+    // SAFETY: `visit` reads `search` only during this call, while it is alive.
+    let _ = unsafe {
+        EnumThreadWindows(
+            GetCurrentThreadId(),
+            Some(visit),
+            LPARAM((&raw mut search) as isize),
+        )
+    };
+    search.found
+}
