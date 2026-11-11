@@ -2,10 +2,12 @@ name: Release
 
 # Push a tag like v0.6.0 to build and publish a release.
 # Run by hand (workflow_dispatch) for a dry run: it builds and checks the zip but publishes nothing.
+# Only a tag publishes; any other ref stops after the build.
 
 on:
   push:
     tags: ["v*"]
+    branches: [claude/relaxed-euler-hf3mhy] # TEMP: dry run before merge
   workflow_dispatch:
 
 permissions:
@@ -35,15 +37,15 @@ jobs:
         id: version
         shell: bash
         env:
-          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' crates/app/Cargo.toml | head -n 1)
           [ -n "$version" ] || { echo "::error::no version in crates/app/Cargo.toml"; exit 1; }
-          if [ "$EVENT" = push ] && [ "$REF_NAME" != "v$version" ]; then
+          if [ "$REF_TYPE" = tag ] && [ "$REF_NAME" != "v$version" ]; then
             echo "::error::tag $REF_NAME does not match the app version $version"; exit 1
           fi
-          if [ "$EVENT" = push ] && ! grep -q "^## \[$version\]" CHANGELOG.md; then
+          if [ "$REF_TYPE" = tag ] && ! grep -q "^## \[$version\]" CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no section for $version"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -83,14 +85,14 @@ jobs:
             EbbRise-*-windows-x64.zip.sha256
           if-no-files-found: error
       - name: Attest build provenance
-        if: github.event_name == 'push'
+        if: github.ref_type == 'tag'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: EbbRise-*-windows-x64.zip
 
   publish:
     name: Publish
-    if: github.event_name == 'push'
+    if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
