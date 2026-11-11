@@ -30,31 +30,33 @@ REQUIRED_CHECKS = ["CI", "cargo-deny"]
 
 
 def gh(args, apply, stdin=None):
+    """Runs `gh` (or prints it). Returns stdout, or None when it failed or was only planned."""
     shown = "gh " + " ".join(args) + (" < " + stdin.replace("\n", " ") if stdin else "")
     print(("RUN  " if apply else "PLAN ") + shown)
-    if apply:
-        done = subprocess.run(["gh", *args], input=stdin, text=True, capture_output=True)
-        if done.returncode:
-            print("  failed:", done.stderr.strip() or done.stdout.strip())
-            return None
-        return done.stdout
-    return None
+    if not apply:
+        return None
+    done = subprocess.run(["gh", *args], input=stdin, text=True, capture_output=True, encoding="utf-8")
+    if done.returncode:
+        print("  failed:", done.stderr.strip() or done.stdout.strip())
+        return None
+    return done.stdout
 
 
 def main() -> int:
     apply = "--apply" in sys.argv
     cargo = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]
-    repo = subprocess.run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+    # `{owner}/{repo}` is filled in by gh from this checkout's git remote. REST calls only.
+    repo = subprocess.run(["gh", "api", "repos/{owner}/{repo}", "--jq", ".full_name"],
                           capture_output=True, text=True, check=True).stdout.strip()
 
-    edit = ["repo", "edit", repo, "--description", cargo["description"],
-            "--homepage", f"{cargo['repository']}/releases/latest",
-            "--enable-discussions", "--enable-wiki=false",
-            "--enable-auto-merge", "--delete-branch-on-merge",
-            "--enable-squash-merge", "--enable-merge-commit=false", "--enable-rebase-merge=false"]
-    for topic in TOPICS:
-        edit += ["--add-topic", topic]
-    gh(edit, apply)
+    settings = {
+        "description": cargo["description"], "homepage": f"{cargo['repository']}/releases/latest",
+        "has_discussions": True, "has_wiki": False,
+        "allow_auto_merge": True, "delete_branch_on_merge": True,
+        "allow_squash_merge": True, "allow_merge_commit": False, "allow_rebase_merge": False,
+    }
+    gh(["api", "-X", "PATCH", f"repos/{repo}", "--input", "-"], apply, json.dumps(settings))
+    gh(["api", "-X", "PUT", f"repos/{repo}/topics", "--input", "-"], apply, json.dumps({"names": TOPICS}))
 
     for path in ("vulnerability-alerts", "automated-security-fixes", "private-vulnerability-reporting"):
         gh(["api", "-X", "PUT", f"repos/{repo}/{path}"], apply)
@@ -64,8 +66,9 @@ def main() -> int:
     gh(["api", "-X", "PATCH", f"repos/{repo}", "--input", "-"], apply, json.dumps(scanning))
 
     for name, (color, text) in LABELS.items():
-        gh(["label", "create", name, "--repo", repo, "--color", color,
-            "--description", text, "--force"], apply)
+        label = json.dumps({"name": name, "color": color, "description": text})
+        if gh(["api", "-X", "POST", f"repos/{repo}/labels", "--input", "-"], apply, label) is None and apply:
+            gh(["api", "-X", "PATCH", f"repos/{repo}/labels/{name}", "--input", "-"], apply, label)
 
     ruleset = {
         "name": "main", "target": "branch", "enforcement": "active",
