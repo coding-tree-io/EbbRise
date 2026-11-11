@@ -6,6 +6,10 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-11
+
+One clear choice for time away from the PC, and fixes that keep settings, pauses and statistics safe.
+
 ### Fixed
 
 - Unreadable settings are backed up and no longer change start at login on startup.
@@ -87,6 +91,7 @@ New features from Workrave, written from a clean-room spec. All but statistics a
 
 First release of EbbRise: break reminders for Windows 10 and 11, a native Rust and Slint port of Stretchly. Stretchly settings are imported on the first start.
 
+[0.6.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.6.0
 [0.5.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.5.0
 [0.4.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.4.0
 [0.3.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.3.0
