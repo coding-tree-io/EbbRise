@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a change or a new feature.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that EbbRise does not let you do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you tried
+      description: Other settings, tools or Stretchly or Workrave features that come close.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: For break ideas, name the study. For anything else, link what you know.

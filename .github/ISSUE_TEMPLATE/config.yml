@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/coding-tree-io/EbbRise/discussions
+    about: For questions and open-ended ideas, use Discussions.
+  - name: Report a security problem
+    url: https://github.com/coding-tree-io/EbbRise/security/advisories/new
+    about: Report it privately. Do not open a public issue.

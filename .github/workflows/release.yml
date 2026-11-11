@@ -1,0 +1,141 @@
+name: Release
+
+# Push a tag like v0.6.0 to build and publish a release.
+# Run by hand (workflow_dispatch) for a dry run: it builds and checks the zip but publishes nothing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      zip: ${{ steps.zip.outputs.name }}
+      sha256: ${{ steps.zip.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the version
+        id: version
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' crates/app/Cargo.toml | head -n 1)
+          [ -n "$version" ] || { echo "::error::no version in crates/app/Cargo.toml"; exit 1; }
+          if [ "$EVENT" = push ] && [ "$REF_NAME" != "v$version" ]; then
+            echo "::error::tag $REF_NAME does not match the app version $version"; exit 1
+          fi
+          if [ "$EVENT" = push ] && ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $version"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: cargo build --release --locked
+      - name: Zip
+        id: zip
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $name = "EbbRise-$env:VERSION-windows-x64.zip"
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item target/release/ebbrise.exe, LICENSE, LICENSE-STRETCHLY, THIRD-PARTY-NOTICES.txt -Destination dist
+          Compress-Archive -Path dist/* -DestinationPath $name
+          $sha = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+          "$sha  $name" | Out-File -Encoding ascii "$name.sha256"
+      - name: Check the zip layout
+        shell: pwsh
+        env:
+          ZIP: ${{ steps.zip.outputs.name }}
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $env:ZIP))
+          $names = ($zip.Entries | ForEach-Object FullName | Sort-Object) -join ','
+          $zip.Dispose()
+          $want = 'LICENSE,LICENSE-STRETCHLY,THIRD-PARTY-NOTICES.txt,ebbrise.exe'
+          Write-Output "zip holds: $names"
+          if ($names -ne $want) { throw "unexpected zip layout, wanted: $want" }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-zip
+          path: |
+            EbbRise-*-windows-x64.zip
+            EbbRise-*-windows-x64.zip.sha256
+          if-no-files-found: error
+      - name: Attest build provenance
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: EbbRise-*-windows-x64.zip
+
+  publish:
+    name: Publish
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+      - name: Write the release notes
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          ZIP: ${{ needs.build.outputs.zip }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            /^## \[/ { on = 0 }
+            on' CHANGELOG.md > changes.md
+          [ -s changes.md ] || { echo "::error::empty CHANGELOG section for $VERSION"; exit 1; }
+          {
+            cat changes.md
+            echo
+            echo "**Install:** download \`$ZIP\`, unzip it over your EbbRise folder (or a new folder) and run \`ebbrise.exe\`. The exe is not code-signed, so SmartScreen can warn on the first start: select **More info**, then **Run anyway**."
+            echo
+            echo 'The zip holds `ebbrise.exe`, `LICENSE` (0BSD), `LICENSE-STRETCHLY` (BSD-2-Clause) and `THIRD-PARTY-NOTICES.txt`.'
+            echo
+            echo "SHA-256 of the zip: \`$SHA256\`"
+            echo
+            echo "Verify the build: \`gh attestation verify $ZIP --repo $GITHUB_REPOSITORY\`"
+            echo
+            echo '[![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)'
+          } > notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          ZIP: ${{ needs.build.outputs.zip }}
+        run: |
+          flags=""
+          case "$VERSION" in *-*) flags="--prerelease" ;; esac
+          gh release create "$TAG" "$ZIP" "$ZIP.sha256" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "EbbRise $VERSION" --notes-file notes.md $flags

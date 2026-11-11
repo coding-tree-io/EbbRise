@@ -1,0 +1,9 @@
+* text=auto
+*.wav binary
+*.ico binary
+*.png binary
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+Cargo.lock linguist-generated
+THIRD-PARTY-NOTICES.txt linguist-generated

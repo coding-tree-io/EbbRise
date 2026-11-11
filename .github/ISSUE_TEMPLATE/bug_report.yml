@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in EbbRise does not work as it should.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check the [latest release](https://github.com/coding-tree-io/EbbRise/releases/latest) first: the bug may be fixed.
+        For a security problem, do not use this form: see the [security policy](https://github.com/coding-tree-io/EbbRise/security/policy).
+  - type: input
+    id: version
+    attributes:
+      label: EbbRise version
+      description: Run `ebbrise version`.
+      placeholder: "The output of `ebbrise version`"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Press Win+R, type `winver`.
+      placeholder: "Windows 11 23H2, build 22631"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect to see?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings
+        2. ...
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "`ebbrise logs` prints the path (`%APPDATA%\\EbbRise\\logs\\main.log`). Paste the last lines here and remove anything private."
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Settings you changed, other displays, apps that were running, imported Stretchly settings.
