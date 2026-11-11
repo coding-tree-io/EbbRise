@@ -125,6 +125,27 @@ impl SettingsForm {
         }
     }
 
+    /// The "When you're away from the PC" choice: 0 keeps counting, 1 pauses the timer
+    /// (only active time counts), 2 counts as a break (natural breaks, with or without
+    /// only active time: `docs/workrave-features.md`, decision D1).
+    pub fn away(&self) -> usize {
+        match (self.natural_breaks, self.usage.active_time_only) {
+            (true, _) => 2,
+            (false, true) => 1,
+            (false, false) => 0,
+        }
+    }
+
+    /// Sets the two settings behind [`Self::away`]. "Count as break" keeps the active-time
+    /// setting as it was: coming from "Pause timer", time away still pauses the timer.
+    pub fn set_away(&mut self, choice: usize, before: &Settings) {
+        self.natural_breaks = choice == 2;
+        self.usage.active_time_only = match choice {
+            2 => before.count_active_time_only,
+            choice => choice == 1,
+        };
+    }
+
     /// The display names of `sounds`: "None" for silence.
     pub fn sound_labels(&self) -> Vec<String> {
         let label = |name: &String| {
@@ -245,6 +266,34 @@ mod tests {
             ["silence", "wind-chime", "missing-file", "crystal-glass"]
         );
         assert_eq!(form.apply(&odd), odd);
+    }
+
+    #[test]
+    fn the_away_choice_maps_both_ways_and_keeps_the_active_time_setting() {
+        let pause = Settings {
+            natural_breaks: false,
+            count_active_time_only: true,
+            ..Settings::default()
+        };
+        let classic = Settings::default();
+        assert!(classic.natural_breaks && !classic.count_active_time_only);
+        // (start, choice, natural breaks, only active time)
+        let cases = [
+            (&pause, 0, false, false),
+            (&pause, 1, false, true),
+            (&pause, 2, true, true),
+            (&classic, 1, false, true),
+            (&classic, 2, true, false),
+        ];
+        for (start, choice, natural, active) in cases {
+            let mut form = SettingsForm::new(start, &files());
+            form.set_away(form.away(), start);
+            assert_eq!(&form.apply(start), start, "an unchanged choice changes nothing");
+            form.set_away(choice, start);
+            let s = form.apply(start);
+            assert_eq!((s.natural_breaks, s.count_active_time_only), (natural, active));
+            assert_eq!(SettingsForm::new(&s, &files()).away(), choice);
+        }
     }
 
     #[test]

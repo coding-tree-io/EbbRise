@@ -153,7 +153,6 @@ impl App {
 fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translator) {
     window.set_fullscreen(form.fullscreen);
     window.set_ideas(form.ideas);
-    window.set_natural_breaks(form.natural_breaks);
     window.set_open_at_login(form.open_at_login);
     window.set_monitor_dnd(form.monitor_dnd);
     window.set_full_screen_hold(form.no_breaks_in_full_screen);
@@ -179,7 +178,7 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
     window.set_long_length(form.long.length as i32);
     window.set_long_notify(form.long.notify);
     window.set_long_strict(form.long.strict);
-    window.set_active_time_only(form.usage.active_time_only);
+    window.set_away(form.away() as i32);
     window.set_block_input(form.usage.block_input);
     window.set_daily_limit(form.usage.daily_limit);
     window.set_daily_limit_hours(form.usage.daily_limit_hours as i32);
@@ -202,14 +201,14 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
 fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) -> SettingsForm {
     let index = |value: i32| usize::try_from(value).unwrap_or(0);
     let (screen, all_screens) = display_setting(index(window.get_display()), &before.screen);
-    SettingsForm {
+    let mut form = SettingsForm {
         no_breaks_in_full_screen: window.get_full_screen_hold(),
         pause_media: window.get_pause_media(),
         screen,
         all_screens,
         fullscreen: window.get_fullscreen(),
         ideas: window.get_ideas(),
-        natural_breaks: window.get_natural_breaks(),
+        natural_breaks: before.natural_breaks,
         open_at_login: window.get_open_at_login(),
         monitor_dnd: window.get_monitor_dnd(),
         language: index(window.get_language()).min(LANGUAGES.len() - 1),
@@ -229,7 +228,7 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) ->
             strict: window.get_long_strict(),
         },
         usage: UsageForm {
-            active_time_only: window.get_active_time_only(),
+            active_time_only: before.count_active_time_only,
             block_input: window.get_block_input(),
             daily_limit: window.get_daily_limit(),
             daily_limit_hours: i64::from(window.get_daily_limit_hours()),
@@ -243,7 +242,9 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) ->
         .map(|i| index(i).min(sounds.len().saturating_sub(1))),
         sounds,
         volume: i64::from(window.get_volume()),
-    }
+    };
+    form.set_away(index(window.get_away()), before);
+    form
 }
 
 /// The fixed entries of the "Show breaks on" list; displays follow them.

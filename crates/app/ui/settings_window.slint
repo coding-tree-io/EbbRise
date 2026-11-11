@@ -86,6 +86,7 @@ component Row inherits Rectangle {
     in property <string> title;
     in property <string> hint;
     in property <bool> last;
+    in property <length> control-width: 280px;
     min-height: root.hint == "" ? 52px : 56px;
     HorizontalLayout {
         spacing: 12px;
@@ -106,7 +107,7 @@ component Row inherits Rectangle {
         }
         // Centred as a whole, so every control lines up with the label column.
         VerticalLayout {
-            width: 280px;
+            width: root.control-width;
             alignment: center;
             HorizontalLayout {
                 alignment: end;
@@ -139,7 +140,6 @@ export component SettingsWindow inherits Window {
     // General
     in-out property <bool> fullscreen;
     in-out property <bool> ideas;
-    in-out property <bool> natural-breaks;
     in-out property <bool> open-at-login;
     in-out property <bool> monitor-dnd;
     in-out property <bool> full-screen-hold;
@@ -163,7 +163,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> long-notify;
     in-out property <bool> long-strict;
     // Activity (from Workrave: docs/workrave-features.md)
-    in-out property <bool> active-time-only;
+    // Time away from the PC: 0 keeps counting, 1 pauses the timer, 2 counts as a break
+    // (SettingsForm::away).
+    in-out property <int> away;
     in-out property <bool> block-input;
     in-out property <bool> daily-limit;
     in-out property <int> daily-limit-hours;
@@ -317,22 +319,11 @@ export component SettingsWindow inherits Window {
                 Row {
                     title: "Block keyboard and mouse";
                     hint: "Other apps get no input during breaks";
+                    last: true;
                     Centre {
                         Switch {
                             label: "Block keyboard and mouse during breaks";
                             checked <=> root.block-input;
-                            toggled => { root.changed(); }
-                        }
-                    }
-                }
-                Row {
-                    title: "Natural breaks";
-                    hint: "Time away from the PC counts as a break";
-                    last: true;
-                    Centre {
-                        Switch {
-                            label: "Natural breaks";
-                            checked <=> root.natural-breaks;
                             toggled => { root.changed(); }
                         }
                     }
@@ -535,6 +526,28 @@ export component SettingsWindow inherits Window {
                     }
                 }
             }
+            Rectangle { height: 8px; }
+            SectionLabel { text: "BREAK TIMING"; }
+            Card {
+                Row {
+                    title: "When you're away";
+                    hint: root.away == 1 ? "The timer waits until you're back"
+                        : root.away == 2 ? "Time away resets the timer, as a break"
+                        : "Breaks stay on time while you're away";
+                    last: true;
+                    control-width: 372px;
+                    Centre {
+                        Segmented {
+                            options: ["Keep counting", "Pause timer", "Count as break"];
+                            current: root.away;
+                            changed(index) => {
+                                root.away = index;
+                                root.changed();
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if root.page == 2: VerticalLayout {
@@ -622,22 +635,6 @@ export component SettingsWindow inherits Window {
             alignment: start;
             PageTitle { text: "Activity"; }
             Rectangle { height: 10px; }
-            SectionLabel { text: "BREAK TIMING"; }
-            Card {
-                Row {
-                    title: "Count only active time";
-                    hint: "Time away from the PC doesn't bring breaks closer";
-                    last: true;
-                    Centre {
-                        Switch {
-                            label: "Count only active time";
-                            checked <=> root.active-time-only;
-                            toggled => { root.changed(); }
-                        }
-                    }
-                }
-            }
-            Rectangle { height: 8px; }
             SectionLabel { text: "DAILY LIMIT"; }
             Card {
                 Row {

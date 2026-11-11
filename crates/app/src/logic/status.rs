@@ -32,7 +32,7 @@ pub(super) fn tray_message(planner: &BreaksPlanner, words: &Translator, now: i64
     let message = next_breaks(planner, words, now, remaining);
     if planner.settings().count_active_time_only {
         // Only active time counts (`docs/workrave-features.md`, feature 1). English only.
-        return format!("{message}\nCounts only active time");
+        return format!("{message}\nTimer pauses while you're away");
     }
     message
 }

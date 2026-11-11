@@ -6,6 +6,11 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+### Changed
+
+- **When you're away** (Settings → Schedule → Break timing): one choice, Keep counting, Pause timer or Count as break, replaces the "Natural breaks" switch on General and "Count only active time" on Activity. Saved settings keep their meaning.
+- The tray tooltip says "Timer pauses while you're away" instead of "Counts only active time".
+
 ## [0.5.0] - 2026-11-10
 
 Calmer break advice backed by newer studies, and a steadier statistics view.
