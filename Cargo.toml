@@ -4,6 +4,15 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
+# Lowest toolchain that builds every dependency. CI (scripts/check_rust_version.py) fails when a
+# dependency needs a newer one; docs and the README badge read this value.
+rust-version = "1.92"
+description = "Break reminders for Windows: a native Rust and Slint port of Stretchly. Every break idea names the study behind it."
+repository = "https://github.com/coding-tree-io/EbbRise"
+homepage = "https://github.com/coding-tree-io/EbbRise"
+readme = "README.md"
+keywords = ["break-reminder", "stretchly", "windows", "slint", "eye-strain"]
+categories = ["gui"]
 # Our code is 0BSD; the parts ported from Stretchly keep its BSD-2-Clause notice (LICENSE-STRETCHLY).
 license = "0BSD AND BSD-2-Clause"
 
