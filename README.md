@@ -1,3 +1,7 @@
+<p align="center">
+  <img alt="EbbRise logo: a tide line inside a ring" src="crates/app/ui/icons/ebbrise.svg" width="128" height="128">
+</p>
+
 <h1 align="center">EbbRise</h1>
 
 <p align="center">
