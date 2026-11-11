@@ -17,7 +17,7 @@ def main() -> int:
     run = subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--locked",
          "--filter-platform", "x86_64-pc-windows-msvc"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",  # Windows would guess cp1252
     )
     if run.returncode:
         print(f"error: cargo metadata failed (is Cargo.lock out of date?):\n{run.stderr}")
