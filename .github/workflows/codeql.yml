@@ -2,7 +2,7 @@ name: CodeQL
 
 on:
   push:
-    branches: [main, claude/relaxed-euler-hf3mhy] # TEMP: check before merge
+    branches: [main]
   pull_request:
     branches: [main]
   schedule:

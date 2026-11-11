@@ -72,11 +72,11 @@ jobs:
         run: |
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $env:ZIP))
-          $names = ($zip.Entries | ForEach-Object FullName | Sort-Object) -join ','
+          $names = @($zip.Entries | ForEach-Object FullName)
           $zip.Dispose()
-          $want = 'LICENSE,LICENSE-STRETCHLY,THIRD-PARTY-NOTICES.txt,ebbrise.exe'
-          Write-Output "zip holds: $names"
-          if ($names -ne $want) { throw "unexpected zip layout, wanted: $want" }
+          $want = @('ebbrise.exe', 'LICENSE', 'LICENSE-STRETCHLY', 'THIRD-PARTY-NOTICES.txt')
+          Write-Output ("zip holds: " + ($names -join ', '))
+          if (Compare-Object $names $want) { throw "unexpected zip layout, wanted: $($want -join ', ')" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-zip
