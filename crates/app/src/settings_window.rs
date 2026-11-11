@@ -243,7 +243,7 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) ->
         sounds,
         volume: i64::from(window.get_volume()),
     };
-    form.set_away(index(window.get_away()), before);
+    form.set_away(index(window.get_away()));
     form
 }
 

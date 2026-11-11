@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod break_window;
+mod cli;
 mod environment;
 mod logging;
 mod logic;
@@ -22,7 +23,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use commands::Command;
+use crate::cli::{handle_local_command, run_second_instance};
 use platform::{Signal, SignalWindow, awake_ms, idle_ms, sound, toast};
 use tracing::{error, info, warn};
 use tray_icon::menu::MenuEvent;
@@ -86,14 +87,21 @@ fn with_app(action: impl FnOnce(&mut App) + 'static) {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() && handle_local_command(&args) {
+        return;
+    }
     if !platform::is_first_instance(r"Local\EbbRise") {
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        return run_second_instance(&args);
+        if !args.is_empty() {
+            run_second_instance(&args);
+        }
+        return;
     }
     let audio_folder = prepare_app_folder();
     info!(version = env!("CARGO_PKG_VERSION"), "starting");
-    let settings = load_settings();
-    sync_autostart(settings.open_at_login);
+    let Some(settings) = startup_settings() else {
+        return;
+    };
     if let Err(error) = toast::register(APP_ID, "EbbRise") {
         error!(%error, "toast registration failed");
     }
@@ -137,12 +145,41 @@ fn main() {
             media: platform::MediaControl::new(),
         });
     });
-    with_app(App::rearm_timer_and_refresh_tray);
+    start_with_command(args);
+    run_event_loop();
+}
+
+fn start_with_command(args: Vec<String>) {
+    with_app(move |app| {
+        if args.is_empty() {
+            app.rearm_timer_and_refresh_tray();
+        } else {
+            app.on_signal(Signal::Command(args));
+        }
+    });
+}
+
+fn run_event_loop() {
     update::start();
     // Slint's loop also dispatches the signal window's and the tray's Win32 messages.
     if let Err(error) = slint::run_event_loop_until_quit() {
         error!(%error, "event loop failed");
     }
+}
+
+fn startup_settings() -> Option<settings::Settings> {
+    let (settings, loaded) = match app_folder().map(|folder| load_settings(&folder)) {
+        Some(Ok(result)) => result,
+        Some(Err(error)) => {
+            error!(%error, "could not back up unreadable settings; startup stopped");
+            return None;
+        }
+        None => (settings::Settings::default(), false),
+    };
+    if loaded {
+        sync_autostart(settings.open_at_login);
+    }
+    Some(settings)
 }
 
 impl App {
@@ -153,9 +190,14 @@ impl App {
         if signal == Signal::Lock {
             self.input_block = None;
         }
+        let session_end = signal == Signal::SessionEnd;
         let effects = self.core.on_signal(signal, awake_ms(), idle_ms(), &Windows);
         self.carry_out(effects);
-        self.save_statistics();
+        if session_end {
+            self.save_today_statistics();
+        } else {
+            self.save_statistics();
+        }
         self.rearm_timer_and_refresh_tray();
     }
 
@@ -248,7 +290,7 @@ impl App {
     }
 
     fn rearm_timer_and_refresh_tray(&mut self) {
-        match self.core.next_wake(awake_ms(), idle_ms()) {
+        match self.core.next_wake(awake_ms(), idle_ms(), &Windows) {
             Some(wake) => self.signals.arm(wake.delay, wake.tolerance),
             None => self.signals.disarm(),
         }
@@ -276,30 +318,6 @@ impl App {
         match sound::with_volume(&wav, self.core.settings().volume) {
             Some(wav) => sound::play(wav),
             None => warn!(name, "not a WAV file"),
-        }
-    }
-}
-
-/// Answers `help`, `version` and `logs` here and passes every other command to the running app.
-fn run_second_instance(args: &[String]) {
-    platform::attach_parent_console();
-    let words: Vec<&str> = args.iter().map(String::as_str).collect();
-    let Some(command) = Command::parse(&words) else {
-        return eprintln!("command '{}' is not supported", words.join(" "));
-    };
-    match command.name.as_str() {
-        "help" => println!("{}", commands::HELP),
-        "version" => println!("EbbRise version {}", env!("CARGO_PKG_VERSION")),
-        "logs" => match app_folder() {
-            Some(folder) => println!("{}", log_path(&folder).display()),
-            None => eprintln!("APPDATA is not set, so there is no log file"),
-        },
-        _ => {
-            let taken = platform::running_app_window()
-                .is_some_and(|window| platform::send_command(window, args));
-            if !taken {
-                eprintln!("the running EbbRise app did not take the command");
-            }
         }
     }
 }

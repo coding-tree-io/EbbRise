@@ -30,6 +30,8 @@ pub enum Signal {
     Lock,
     /// The session was unlocked.
     Unlock,
+    /// Windows is ending the session.
+    SessionEnd,
     /// New Focus Assist value: 0 off, 1 priority only, 2 alarms only.
     FocusAssist(i32),
     /// Command-line arguments that a second instance sent with [`send_command`].
@@ -215,6 +217,8 @@ unsafe extern "system" fn window_proc(
             _ => None,
         },
         WM_FOCUS_ASSIST => Some(Signal::FocusAssist(wparam.0 as u32 as i32)),
+        WM_QUERYENDSESSION => return LRESULT(1),
+        WM_ENDSESSION if wparam.0 != 0 => Some(Signal::SessionEnd),
         // SAFETY: Windows passes a COPYDATASTRUCT that is valid during WM_COPYDATA.
         WM_COPYDATA => unsafe { command_arguments(lparam) }.map(Signal::Command),
         _ => None,

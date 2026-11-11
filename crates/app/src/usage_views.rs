@@ -27,24 +27,38 @@ impl App {
     /// Saves the records that changed since the last save; keeps them for the next save when
     /// the write fails.
     pub(crate) fn save_statistics(&mut self) {
-        let records = self.core.statistics_to_save(platform::awake_ms());
+        let now = platform::awake_ms();
+        let records = self.core.statistics_to_save(now);
+        if records.is_empty() {
+            return;
+        }
         let Some(path) = self.statistics_path() else {
+            self.core.keep_unsaved_statistics(records);
             return;
         };
         if let Err(error) = statistics_store::save(&path, &records) {
             warn!(%error, "statistics not saved");
             self.core.keep_unsaved_statistics(records);
+        } else {
+            self.core.statistics_saved(now);
         }
     }
 
     /// Saves today's record as it is, with the active time (at quit).
     pub(crate) fn save_today_statistics(&mut self) {
+        self.core.prepare_final_statistics(
+            platform::awake_ms(),
+            platform::idle_ms(),
+            &crate::environment::Windows,
+        );
         self.save_statistics();
-        let today = self.core.today_statistics(platform::awake_ms());
-        if let Some(path) = self.statistics_path()
-            && let Err(error) = statistics_store::save(&path, &[today])
-        {
-            warn!(%error, "statistics not saved");
+        let Some(path) = self.statistics_path() else {
+            return;
+        };
+        let now = platform::awake_ms();
+        match statistics_store::save(&path, &[self.core.today_statistics(now)]) {
+            Ok(()) => self.core.statistics_saved(now),
+            Err(error) => warn!(%error, "statistics not saved"),
         }
     }
 

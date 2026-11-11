@@ -34,6 +34,9 @@ pub struct DayStatistics {
     pub daily_limit_shown: u32,
     /// The user chose "Done for today".
     pub daily_limit_stopped: bool,
+    /// Active-time threshold after postponing the daily limit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daily_limit_postponed_until: Option<i64>,
 }
 
 /// Returns each day in the inclusive range, with empty records for missing days.
@@ -197,6 +200,17 @@ mod tests {
         );
         assert_eq!(days[1], saved);
         assert_eq!(days[0].active_ms, None);
+    }
+
+    #[test]
+    fn older_records_load_without_a_postponed_limit() {
+        let saved: DayStatistics = serde_json::from_str(r#"{"day":"2026-11-09"}"#).unwrap();
+        assert_eq!(saved.daily_limit_postponed_until, None);
+        assert!(
+            !serde_json::to_string(&saved)
+                .unwrap()
+                .contains("dailyLimitPostponedUntil")
+        );
     }
 
     #[test]

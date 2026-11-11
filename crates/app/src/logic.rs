@@ -23,7 +23,6 @@ use settings::Settings;
 pub use break_screen::{BreakButton, BreakScreen, countdown, idea_shown, ring_commands};
 pub use menu::{MenuAction, MenuEntry};
 pub use settings_form::{BreakForm, SettingsForm, UsageForm};
-#[allow(unused_imports)] // The statistics window will use this when charts are added.
 pub use statistics::day_range;
 pub use statistics::{BreakCounts, DayStatistics};
 pub use usage::DailyLimitScreen;
@@ -79,6 +78,10 @@ pub trait Environment {
     fn until_morning(&self, settings: &Settings) -> Option<i64>;
     /// Today as `YYYY-MM-DD`, where a day starts at 04:00 local time.
     fn day(&self) -> String;
+    /// Wall-clock time, ms since the Unix epoch.
+    fn wall_ms(&self) -> i64;
+    /// Ms until the next day starts at 04:00 local time.
+    fn until_day_boundary(&self) -> i64;
 }
 
 /// The kind and words of the last break, for the `last` command.
@@ -98,6 +101,7 @@ pub struct Core {
     /// Words that a `mini` or `long` command set for the next break (upstream `nextIdea`).
     next_idea: Option<command::IdeaOverride>,
     last_break: Option<LastBreak>,
+    morning_target: Option<i64>,
     usage: usage::Usage,
 }
 
@@ -106,7 +110,7 @@ impl Core {
     pub fn new(settings: Settings, now: i64, focus_assist: Option<i32>) -> Self {
         let words = Translator::new(&settings.language);
         let ideas = Ideas::load(&settings, Rng::new());
-        let usage = usage::Usage::new(settings.daily_limit_time);
+        let usage = usage::Usage::new(settings.daily_limit_time, now);
         let mut planner = BreaksPlanner::new(settings, now);
         planner.focus_assist(now, focus_assist.unwrap_or(FOCUS_ASSIST_UNSUPPORTED));
         Self {
@@ -118,6 +122,7 @@ impl Core {
             media_paused: false,
             next_idea: None,
             last_break: None,
+            morning_target: None,
             usage,
         }
     }
@@ -152,7 +157,11 @@ impl Core {
                 return effects;
             }
             Signal::Suspend | Signal::Lock => self.planner.suspend(now),
-            Signal::Resume | Signal::Unlock => self.planner.wake(now),
+            Signal::Resume | Signal::Unlock => {
+                self.planner.wake(now);
+                self.recheck_morning_pause(now, os);
+            }
+            Signal::SessionEnd => {}
             Signal::FocusAssist(value) => self.planner.focus_assist(now, value),
             Signal::Command(args) => {
                 let mut effects = self.on_command(&args, now, os);
@@ -289,31 +298,6 @@ impl Core {
         idea
     }
 
-    /// Pause until morning pauses indefinitely when there is no morning time.
-    pub fn on_menu(&mut self, action: MenuAction, now: i64, os: &impl Environment) -> Vec<Effect> {
-        match action {
-            MenuAction::Resume if self.planner.paused() => self.planner.resume(now),
-            MenuAction::Pause(duration) => self.planner.pause(now, duration),
-            MenuAction::PauseUntilMorning => {
-                let duration = os
-                    .until_morning(self.settings())
-                    .unwrap_or(BreaksPlanner::INDEFINITELY);
-                self.planner.pause(now, duration);
-            }
-            MenuAction::PauseIndefinitely => self.planner.pause(now, BreaksPlanner::INDEFINITELY),
-            MenuAction::SkipToMini => self.planner.skip_to_mini(now, None),
-            MenuAction::SkipToLong => self.planner.skip_to_long(now, None),
-            MenuAction::Reset => self.planner.reset(now),
-            MenuAction::Resume
-            | MenuAction::Preferences
-            | MenuAction::Statistics
-            | MenuAction::DownloadUpdate
-            | MenuAction::CheckForUpdates
-            | MenuAction::Quit => {}
-        }
-        self.interrupted_media().into_iter().collect()
-    }
-
     /// Applies settings changed in the settings window; a new language applies to new texts.
     pub fn set_settings(&mut self, settings: Settings, now: i64) {
         if settings.language != self.settings().language {
@@ -404,6 +388,8 @@ mod tests {
         next_day: bool,
         full_screen: bool,
         full_screen_reads: std::cell::Cell<usize>,
+        wall_ms: i64,
+        boundary_ms: Option<i64>,
     }
 
     impl Environment for FakeOs {
@@ -427,6 +413,12 @@ mod tests {
                 "2026-11-09"
             }
             .to_owned()
+        }
+        fn wall_ms(&self) -> i64 {
+            self.wall_ms
+        }
+        fn until_day_boundary(&self) -> i64 {
+            self.boundary_ms.unwrap_or(86_400_000)
         }
     }
 
@@ -457,7 +449,7 @@ mod tests {
         fn run_until(&mut self, until: i64) {
             while let Some(at) = self
                 .core
-                .next_wake(self.now, self.idle())
+                .next_wake(self.now, self.idle(), &self.os)
                 .map(|wake| self.now + wake.delay.max(USER_TIMER_MINIMUM_MS))
                 .filter(|at| *at <= until)
             {
@@ -1029,5 +1021,101 @@ Next Long break in about 2 minutes"
         );
         assert!(!sim.core.statistics_to_save(sim.now).is_empty());
         assert!(sim.core.statistics_to_save(sim.now).is_empty());
+    }
+
+    #[test]
+    fn morning_pause_ends_after_sleep_and_other_pauses_replace_it() {
+        for command in [false, true] {
+            let mut sim = Sim::new("");
+            sim.os.morning = Some(8 * HOUR_MS);
+            if command {
+                sim.command(&["pause", "-d", "until-morning"]);
+            } else {
+                sim.core
+                    .on_menu(MenuAction::PauseUntilMorning, sim.now, &sim.os);
+            }
+            sim.os.wall_ms = 7 * HOUR_MS;
+            sim.signal(Signal::Resume);
+            assert!(sim.core.planner.paused());
+            assert_eq!(sim.core.planner.deadline(), Some(HOUR_MS));
+            sim.os.wall_ms = 9 * HOUR_MS;
+            sim.signal(Signal::Resume);
+            assert!(!sim.core.planner.paused());
+            sim.core
+                .on_menu(MenuAction::PauseUntilMorning, sim.now, &sim.os);
+            sim.core
+                .on_menu(MenuAction::PauseIndefinitely, sim.now, &sim.os);
+            sim.os.wall_ms += 9 * HOUR_MS;
+            sim.signal(Signal::Unlock);
+            assert!(sim.core.planner.paused());
+        }
+    }
+
+    #[test]
+    fn active_time_is_checkpointed_after_ten_minutes() {
+        let mut sim = Sim::new(
+            r#","miniBreak":false,"longBreak":false,"dailyLimit":true,"dailyLimitTime":36000000"#,
+        );
+        sim.run_until(1_000);
+        let _ = sim.core.statistics_to_save(sim.now);
+        sim.core.statistics_saved(sim.now);
+        sim.run_until(600_000);
+        assert!(sim.core.statistics_to_save(sim.now).is_empty());
+        sim.run_until(610_000);
+        let saved = sim.core.statistics_to_save(sim.now);
+        assert_eq!(saved.len(), 1);
+        assert!(saved[0].active_ms.unwrap() >= 600_000);
+    }
+
+    #[test]
+    fn final_save_rolls_over_to_the_current_day() {
+        let mut sim = Sim::new(r#","dailyLimit":true,"dailyLimitTime":36000000"#);
+        sim.run_until(60_000);
+        sim.os.next_day = true;
+        sim.core
+            .prepare_final_statistics(sim.now, sim.idle(), &sim.os);
+        let records = sim.core.statistics_to_save(sim.now);
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.day.as_str())
+                .collect::<Vec<_>>(),
+            ["2026-11-09", "2026-11-10"]
+        );
+        assert_eq!(sim.core.today_statistics(sim.now).day, "2026-11-10");
+    }
+
+    #[test]
+    fn activity_wake_does_not_pass_the_day_boundary() {
+        let mut sim = Sim::new(
+            r#","miniBreak":false,"longBreak":false,"dailyLimit":true,"dailyLimitTime":36000000"#,
+        );
+        sim.run_until(1_000);
+        sim.os.boundary_ms = Some(100);
+        assert_eq!(
+            sim.core
+                .next_wake(sim.now, sim.idle(), &sim.os)
+                .unwrap()
+                .delay,
+            100
+        );
+    }
+
+    #[test]
+    fn postponed_daily_limit_survives_restart() {
+        let settings = r#","miniBreak":false,"longBreak":false,"dailyLimit":true,"dailyLimitTime":60000,"dailyLimitPostponeTime":30000"#;
+        let mut sim = Sim::new(settings);
+        sim.run_until(70_000);
+        sim.core.on_daily_limit(true, sim.now);
+        let saved = sim.core.today_statistics(sim.now);
+        let saved: DayStatistics =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        assert!(saved.daily_limit_postponed_until.unwrap() > saved.active_ms.unwrap());
+        let mut restarted = Sim::new(settings);
+        restarted.core.restore_statistics(saved);
+        restarted.run_until(10_000);
+        assert!(restarted.take_log().is_empty());
+        restarted.run_until(40_000);
+        assert_eq!(restarted.take_log().len(), 1);
     }
 }

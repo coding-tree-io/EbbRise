@@ -38,4 +38,32 @@ impl Environment for Windows {
             .map(|time| time.date().to_string())
             .unwrap_or_default()
     }
+
+    fn wall_ms(&self) -> i64 {
+        jiff::Timestamp::now().as_millisecond()
+    }
+
+    fn until_day_boundary(&self) -> i64 {
+        use jiff::ToSpan;
+        let now = jiff::Zoned::now();
+        let boundary = now
+            .with()
+            .hour(4)
+            .minute(0)
+            .second(0)
+            .millisecond(0)
+            .build();
+        boundary
+            .ok()
+            .and_then(|boundary| {
+                if boundary <= now {
+                    boundary.checked_add(1.day()).ok()
+                } else {
+                    Some(boundary)
+                }
+            })
+            .map_or(1_000, |boundary| {
+                boundary.timestamp().as_millisecond() - now.timestamp().as_millisecond()
+            })
+    }
 }

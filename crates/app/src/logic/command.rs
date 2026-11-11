@@ -3,7 +3,7 @@
 use breaks::BreaksPlanner;
 use commands::Command;
 
-use super::{BreakButton, BreakIdea, Core, Effect, Environment};
+use super::{BreakButton, BreakIdea, Core, Effect, Environment, MenuAction};
 
 /// Words a `mini` or `long` command gives the next break; `None` keeps the picked idea's part.
 #[derive(Clone, Debug, Default)]
@@ -22,6 +22,60 @@ impl From<BreakIdea> for IdeaOverride {
 }
 
 impl Core {
+    pub(super) fn recheck_morning_pause(&mut self, now: i64, os: &impl Environment) {
+        let Some(target) = self.morning_target else {
+            return;
+        };
+        if !self.planner.paused() {
+            self.morning_target = None;
+        } else if target <= os.wall_ms() {
+            self.planner.resume(now);
+            self.morning_target = None;
+        } else {
+            let left = (target - os.wall_ms()).max(BreaksPlanner::INDEFINITELY + 1);
+            self.planner.pause(now, left);
+        }
+    }
+
+    /// Pause until morning pauses indefinitely when there is no morning time.
+    pub fn on_menu(&mut self, action: MenuAction, now: i64, os: &impl Environment) -> Vec<Effect> {
+        if matches!(
+            action,
+            MenuAction::Resume
+                | MenuAction::Pause(_)
+                | MenuAction::PauseUntilMorning
+                | MenuAction::PauseIndefinitely
+                | MenuAction::Reset
+        ) {
+            self.morning_target = None;
+        }
+        match action {
+            MenuAction::Resume if self.planner.paused() => self.planner.resume(now),
+            MenuAction::Pause(duration) => self.planner.pause(now, duration),
+            MenuAction::PauseUntilMorning => {
+                self.pause_until_morning(now, os);
+            }
+            MenuAction::PauseIndefinitely => self.planner.pause(now, BreaksPlanner::INDEFINITELY),
+            MenuAction::SkipToMini => self.planner.skip_to_mini(now, None),
+            MenuAction::SkipToLong => self.planner.skip_to_long(now, None),
+            MenuAction::Reset => self.planner.reset(now),
+            MenuAction::Resume
+            | MenuAction::Preferences
+            | MenuAction::Statistics
+            | MenuAction::DownloadUpdate
+            | MenuAction::CheckForUpdates
+            | MenuAction::Quit => {}
+        }
+        self.interrupted_media().into_iter().collect()
+    }
+
+    fn pause_until_morning(&mut self, now: i64, os: &impl Environment) {
+        let duration = os.until_morning(self.settings());
+        self.morning_target = duration.map(|duration| os.wall_ms() + duration);
+        self.planner
+            .pause(now, duration.unwrap_or(BreaksPlanner::INDEFINITELY));
+    }
+
     /// Runs a forwarded command line. `help`, `version` and `logs` run in the second
     /// process. `postpone`, `skip` and `finish` press the break window's button, and do
     /// nothing when it does not offer it.
@@ -50,6 +104,9 @@ impl Core {
         if command.name == "statistics" {
             return vec![Effect::OpenStatistics];
         }
+        if matches!(command.name.as_str(), "resume" | "toggle" | "reset") {
+            self.morning_target = None;
+        }
         match command.name.as_str() {
             "reset" => self.planner.reset(now),
             "pause" => self.pause_from_command(&command, now, os),
@@ -64,10 +121,15 @@ impl Core {
     }
 
     fn pause_from_command(&mut self, command: &Command, now: i64, os: &impl Environment) {
+        if command.duration.as_deref() == Some("until-morning") {
+            self.pause_until_morning(now, os);
+            return;
+        }
         let until_morning = os
             .until_morning(self.settings())
             .unwrap_or(BreaksPlanner::INDEFINITELY);
         if let Some(duration) = command.pause_duration(until_morning) {
+            self.morning_target = None;
             self.planner.pause(now, duration);
         }
     }

@@ -24,6 +24,16 @@ fn until_morning_fixed_hour_sunrise_and_dst() {
     )
     .unwrap();
     assert!((3_540_000..=3_660_000).contains(&sunrise));
+    let same_hour = until_morning(
+        &"2018-08-04T06:00:00+02:00[Europe/Amsterdam]"
+            .parse()
+            .unwrap(),
+        &MorningHour::Sunrise("sunrise".into()),
+        52.0,
+        4.0,
+    )
+    .unwrap();
+    assert!((1..3_600_000).contains(&same_hour), "{same_hour}");
 }
 
 #[test]

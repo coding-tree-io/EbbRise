@@ -38,7 +38,7 @@ The zips are built by [GitHub Actions](.github/workflows/release.yml) from the t
 gh attestation verify .\EbbRise-<version>-windows-x64.zip --repo coding-tree-io/EbbRise
 ```
 
-(Releases up to 0.5.0 were built by hand and have no attestation; check their SHA-256 only.)
+(Earlier hand-built releases have no attestation; check their SHA-256 only.)
 
 On the first start, EbbRise imports your Stretchly settings if Stretchly is installed.
 
@@ -50,9 +50,9 @@ EbbRise has no telemetry and no account. Its settings (`config.json`), statistic
 
 - Mini and Long breaks on their own clocks, with notifications before them, strict mode, postpone and skip.
 - Breaks in a window or full screen, with a countdown ring and an evidence-based idea.
-- Natural breaks: time away from the PC counts as a break. Breaks wait during Do Not Disturb.
+- Choose how time away affects breaks under Settings → Schedule → Break timing: Keep counting, Pause timer or Count as break. Breaks wait during Do Not Disturb.
 - Settings window in light, dark or the Windows theme. The tray, the notifications and most of Settings use Stretchly's translations ([all languages](crates/i18n/locales)).
-- From [Workrave](https://workrave.org), as opt-in settings on the Activity page: count only active time (time away from the PC holds the wait for a break), and a daily limit on PC use. Also opt-in: block keyboard and mouse input to other apps during breaks. Strict mode is a separate setting: it removes Skip and Postpone.
+- From [Workrave](https://workrave.org), as opt-in settings on the Activity page: a daily limit on PC use and an input block for other apps during breaks. Strict mode is a separate setting: it removes Skip and Postpone.
 - Statistics for each day: breaks shown, completed, taken naturally, skipped and postponed, and active time. Open them from the tray menu or with `ebbrise statistics`.
 - Built-in sounds; put your own WAV files in `%APPDATA%\EbbRise\audio`.
 - Stretchly's command line (see below).

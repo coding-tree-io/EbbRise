@@ -27,20 +27,41 @@ pub(crate) fn log_path(app_folder: &Path) -> PathBuf {
     app_folder.join("logs").join("main.log")
 }
 
-pub(crate) fn load_settings() -> Settings {
-    let Some(folder) = app_folder() else {
-        return Settings::default();
-    };
+pub(crate) fn load_settings(folder: &Path) -> std::io::Result<(Settings, bool)> {
     let own = folder.join("config.json");
     let stretchly = folder.with_file_name("Stretchly").join("config.json");
     match Settings::load_or_import(&own, &stretchly) {
         Ok(settings) => {
             info!(path = %own.display(), "settings loaded");
-            settings
+            Ok((settings, true))
         }
         Err(error) => {
             error!(path = %own.display(), %error, "settings unreadable, using defaults");
-            Settings::default()
+            if own.try_exists()? {
+                let backup = folder.join("config.unreadable.json");
+                std::fs::copy(&own, &backup)?;
+                warn!(path = %backup.display(), "unreadable settings backed up");
+            }
+            Ok((Settings::default(), false))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_config_is_backed_up_before_defaults_are_used() {
+        let folder = std::env::temp_dir().join(format!("ebbrise-config-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("config.json"), "{broken").unwrap();
+        let (_, loaded) = load_settings(&folder).unwrap();
+        assert!(!loaded);
+        assert_eq!(
+            std::fs::read_to_string(folder.join("config.unreadable.json")).unwrap(),
+            "{broken"
+        );
+        std::fs::remove_dir_all(folder).unwrap();
     }
 }

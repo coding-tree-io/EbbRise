@@ -54,7 +54,7 @@ impl Core {
 
     /// The one timer the app needs: the earliest of the break deadline, the idle check and
     /// the app exclusion check. On a tie the break deadline wins, with its tighter tolerance.
-    pub fn next_wake(&self, now: i64, idle: i64) -> Option<Wake> {
+    pub fn next_wake(&self, now: i64, idle: i64, os: &impl Environment) -> Option<Wake> {
         let settings = self.settings();
         let held_start = self.full_screen_check_at.is_some()
             && matches!(
@@ -89,7 +89,10 @@ impl Core {
             delay: (due - now).max(0),
             tolerance: 1_000,
         });
-        let usage = self.usage_wake(now, idle);
+        let usage = self.usage_wake(now, idle).map(|mut wake| {
+            wake.delay = wake.delay.min(os.until_day_boundary().max(0));
+            wake
+        });
         let full_screen_check = self.full_screen_check_at.map(|at| Wake {
             delay: (at - now).max(0),
             tolerance: 1_000,

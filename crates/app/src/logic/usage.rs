@@ -29,17 +29,21 @@ pub(super) struct Usage {
     limit_at: Option<i64>,
     /// The reminder window is open.
     limit_shown: bool,
+    last_saved_at: i64,
+    last_saved_active: Option<i64>,
     pub(super) stats: Statistics,
 }
 
 impl Usage {
-    pub(super) fn new(daily_limit_time: i64) -> Self {
+    pub(super) fn new(daily_limit_time: i64, now: i64) -> Self {
         Self {
             monitor: None,
             carried_ms: 0,
             base_ms: 0,
             limit_at: Some(daily_limit_time),
             limit_shown: false,
+            last_saved_at: now,
+            last_saved_active: None,
             stats: Statistics::new("", None),
         }
     }
@@ -48,6 +52,7 @@ impl Usage {
     pub(super) fn set_limit(&mut self, daily_limit_time: i64) {
         if self.limit_at.is_some() {
             self.limit_at = Some(daily_limit_time);
+            self.stats.today_mut().daily_limit_postponed_until = None;
         }
     }
 
@@ -65,8 +70,11 @@ impl Core {
     /// Continues today's record from an earlier run.
     pub fn restore_statistics(&mut self, saved: DayStatistics) {
         self.usage.carried_ms = saved.active_ms.unwrap_or(0);
+        self.usage.last_saved_active = saved.active_ms;
         if saved.daily_limit_stopped {
             self.usage.limit_at = None;
+        } else if let Some(threshold) = saved.daily_limit_postponed_until {
+            self.usage.limit_at = Some(threshold);
         }
         self.usage.stats = Statistics::new(&saved.day.clone(), Some(saved));
     }
@@ -83,11 +91,27 @@ impl Core {
     /// The records to save: ended days and today, when a count changed since the last call.
     pub fn statistics_to_save(&mut self, now: i64) -> Vec<DayStatistics> {
         let today = self.today_statistics(now);
+        if now - self.usage.last_saved_at >= 600_000
+            && today.active_ms != self.usage.last_saved_active
+        {
+            // Marks today changed, so the checkpoint writes its active time.
+            self.usage.stats.today_mut();
+        }
         let mut records = self.usage.stats.take_changed();
         if let Some(last) = records.last_mut() {
             *last = today;
         }
         records
+    }
+
+    pub fn statistics_saved(&mut self, now: i64) {
+        self.usage.last_saved_at = now;
+        self.usage.last_saved_active = self.today_statistics(now).active_ms;
+    }
+
+    /// Updates the day and activity before a final save.
+    pub fn prepare_final_statistics(&mut self, now: i64, idle: i64, os: &impl Environment) {
+        self.track_usage(now, idle, os);
     }
 
     /// Gives back records from [`Core::statistics_to_save`] that were not written.
@@ -103,7 +127,7 @@ impl Core {
         os: &impl Environment,
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
-        // First the activity: an idle time found now can start before the new day.
+        // shortcut: activity since the last look stays on the old day, split it if exact boundaries are needed.
         self.observe_activity(now, idle, &mut effects);
         let day = os.day();
         if self.usage.stats.today().day != day {
@@ -219,9 +243,12 @@ impl Core {
         if postpone {
             let later = self.usage.active_today(now) + self.settings().daily_limit_postpone_time;
             self.usage.limit_at = Some(later);
+            self.usage.stats.today_mut().daily_limit_postponed_until = Some(later);
         } else {
             self.usage.limit_at = None;
-            self.usage.stats.today_mut().daily_limit_stopped = true;
+            let today = self.usage.stats.today_mut();
+            today.daily_limit_stopped = true;
+            today.daily_limit_postponed_until = None;
         }
         vec![close]
     }

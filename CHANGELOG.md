@@ -6,9 +6,20 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+### Fixed
+
+- Unreadable settings are backed up and no longer change start at login on startup.
+- Changing away settings no longer leaves breaks stopped.
+- Pause until morning ends after an overnight sleep.
+- Active time is saved during use and when Windows ends the session.
+- Statistics roll over at the 04:00 day boundary and before exit.
+- Command-line actions work when EbbRise is not already running.
+- Sunrise pauses use today's sunrise until it passes.
+- A postponed daily-limit reminder stays postponed after restart.
+
 ### Changed
 
-- **When you're away** (Settings → Schedule → Break timing): one choice, Keep counting, Pause timer or Count as break, replaces the "Natural breaks" switch on General and "Count only active time" on Activity. Saved settings keep their meaning.
+- **When you're away** (Settings → Schedule → Break timing): one choice, Keep counting, Pause timer or Count as break, replaces the "Natural breaks" switch on General and "Count only active time" on Activity. Count as break works like Stretchly's natural breaks: time away of 5 minutes or more restarts the timer as a break. Saved settings keep their meaning.
 - The tray tooltip says "Timer pauses while you're away" instead of "Counts only active time".
 
 ## [0.5.0] - 2026-11-10

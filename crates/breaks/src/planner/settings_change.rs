@@ -26,11 +26,21 @@ impl BreaksPlanner {
         let schedule_changed = schedule(&self.settings) != schedule(&settings);
         let active_time_off = !settings.count_active_time_only;
         self.settings = settings;
+        let leaving_away =
+            self.away && (!self.settings.natural_breaks || self.settings.count_active_time_only);
+        if leaving_away {
+            self.away = false;
+        }
         if active_time_off {
             self.idle_since = None;
             self.release(now, 0);
         }
-        if schedule_changed && !self.in_break() && !self.paused {
+        if (schedule_changed || leaving_away)
+            && !self.in_break()
+            && !self.paused
+            && !self.dnd()
+            && !self.exclusion
+        {
             self.reset(now);
         }
     }
@@ -57,5 +67,50 @@ mod tests {
         planner.set_settings(sooner, 50_000);
         assert_ne!(planner.deadline(), first);
         assert_eq!(planner.settings().volume, 0.2);
+    }
+
+    #[test]
+    fn leaving_classic_away_restarts_unless_another_hold_applies() {
+        for active_only in [false, true] {
+            let settings = Settings {
+                natural_breaks: true,
+                count_active_time_only: false,
+                ..Settings::default()
+            };
+            let mut planner = BreaksPlanner::new(settings.clone(), 0);
+            planner.idle(1_000_000, 1_000_000);
+            assert!(planner.away());
+            planner.set_settings(
+                Settings {
+                    natural_breaks: active_only,
+                    count_active_time_only: active_only,
+                    ..settings
+                },
+                1_000_000,
+            );
+            assert!(!planner.away());
+            assert!(planner.deadline().is_some());
+        }
+        let mut held = BreaksPlanner::new(
+            Settings {
+                natural_breaks: true,
+                monitor_dnd: true,
+                ..Settings::default()
+            },
+            0,
+        );
+        held.idle(1_000_000, 1_000_000);
+        held.focus_assist(1_000_000, 1);
+        held.set_settings(
+            Settings {
+                natural_breaks: false,
+                ..held.settings().clone()
+            },
+            1_000_000,
+        );
+        assert!(!held.away());
+        assert_eq!(held.deadline(), None);
+        held.focus_assist(1_001_000, 0);
+        assert!(held.deadline().is_some());
     }
 }

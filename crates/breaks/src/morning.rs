@@ -4,7 +4,7 @@ use sunrise::{Coordinates, SolarDay, SolarEvent};
 
 /// Milliseconds from `now` until the next morning (upstream `untilMorning.js`).
 ///
-/// The morning is today if its hour has not started yet, else tomorrow. Latitude and
+/// The morning is today if its time has not passed yet, else tomorrow. Latitude and
 /// longitude, in degrees, are used only for sunrise. Returns `None` when the time cannot be
 /// computed, such as an hour outside 0–23 or no sunrise at that place.
 pub fn until_morning(
@@ -35,7 +35,8 @@ pub fn until_morning(
         }
         _ => return None,
     };
-    if now.hour() >= target.hour() {
+    if now >= target {
+        // shortcut: tomorrow uses today's sunrise time, recalculate when minute accuracy matters.
         target = target.checked_add(1.day()).ok()?;
     }
     Some(target.timestamp().as_millisecond() - now.timestamp().as_millisecond())
