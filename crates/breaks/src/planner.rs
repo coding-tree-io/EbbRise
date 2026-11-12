@@ -72,6 +72,8 @@ pub struct BreaksPlanner {
     idle_since: Option<i64>,
     /// The wait is held from this time: the user is idle while only active time counts.
     held_since: Option<i64>,
+    /// Start of the hold while the user interacts during a break.
+    break_held_since: Option<i64>,
 }
 
 impl BreaksPlanner {
@@ -96,6 +98,7 @@ impl BreaksPlanner {
             wait_start: now,
             idle_since: None,
             held_since: None,
+            break_held_since: None,
         };
         planner.plan_next(now);
         planner
@@ -109,7 +112,8 @@ impl BreaksPlanner {
     /// When the pending step is due; `None` when nothing is scheduled (held, paused
     /// indefinitely, both break types off, or waiting for a manual finish).
     pub fn deadline(&self) -> Option<i64> {
-        self.deadline.filter(|_| self.held_since.is_none())
+        self.deadline
+            .filter(|_| self.held_since.is_none() && self.break_held_since.is_none())
     }
 
     /// Breaks are paused by the user or by suspend/lock.
@@ -186,6 +190,7 @@ impl BreaksPlanner {
             return false;
         }
         self.postpones += 1;
+        self.break_held_since = None;
         self.deadline = Some(now + rule.delay);
         self.delay = rule.delay;
         self.next = rule.start;
@@ -211,6 +216,7 @@ impl BreaksPlanner {
         let delay = delay.unwrap_or(SKIP_DELAY_MS);
         // A break the user asks for comes even while they are idle.
         self.held_since = None;
+        self.break_held_since = None;
         self.next = start;
         self.deadline = Some(now + delay);
         self.delay = delay;
@@ -220,6 +226,7 @@ impl BreaksPlanner {
     pub fn pause(&mut self, now: i64, duration: i64) {
         self.paused = true;
         self.held_since = None;
+        self.break_held_since = None;
         self.long_due = None;
         self.postpones = 0;
         self.next = Event::ResumeBreaks;
@@ -298,6 +305,7 @@ impl BreaksPlanner {
     fn plan_next(&mut self, now: i64) {
         self.postpones = 0;
         self.held_since = None;
+        self.break_held_since = None;
         self.wait_start = now;
         if self.next == Event::FinishLongBreak {
             self.long_due = None;

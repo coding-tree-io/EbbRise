@@ -1,7 +1,7 @@
 //! The update check, as upstream's `checkVersion`: shortly after start and then every 48
 //! hours, read the latest release tag on GitHub. A newer one adds "Download latest version"
 //! to the top of the tray menu and, when `notifyNewVersion` is on, shows a notification.
-//! "Check for updates" in the tray menu checks at once and always reports the result.
+//! "Check for updates" in the tray menu and on the About page checks at once and always reports the result.
 
 use std::time::Duration;
 

@@ -46,6 +46,7 @@ impl App {
                     .and_then(Path::parent),
             )
         });
+        window.on_check_for_updates(crate::update::check_now);
         window.on_dark_mode_changed(colour_title_bar);
         window.on_restore_defaults(|| with_app(|app| app.change_settings(Settings::default())));
         window.window().on_close_requested(|| {
@@ -61,6 +62,14 @@ impl App {
             // Windows creates the native window during the next event loop turn.
             let dark = window.get_dark_mode();
             Timer::single_shot(Duration::from_millis(50), move || colour_title_bar(dark));
+        }
+    }
+
+    /// Opens the settings window at its About page.
+    pub(crate) fn open_about(&mut self) {
+        self.open_settings();
+        if let Some(window) = &self.settings_window {
+            window.set_page(3);
         }
     }
 
@@ -182,6 +191,7 @@ fn set_form(window: &SettingsWindow, form: &SettingsForm, words: &i18n::Translat
     window.set_block_input(form.usage.block_input);
     window.set_daily_limit(form.usage.daily_limit);
     window.set_daily_limit_hours(form.usage.daily_limit_hours as i32);
+    window.set_daily_limit_repeat(form.usage.daily_limit_repeat_minutes as i32);
     let labels: Vec<SharedString> = form
         .sounds
         .iter()
@@ -232,6 +242,7 @@ fn read_form(window: &SettingsWindow, sounds: Vec<String>, before: &Settings) ->
             block_input: window.get_block_input(),
             daily_limit: window.get_daily_limit(),
             daily_limit_hours: i64::from(window.get_daily_limit_hours()),
+            daily_limit_repeat_minutes: i64::from(window.get_daily_limit_repeat()),
         },
         sound_choice: [
             window.get_mini_start(),

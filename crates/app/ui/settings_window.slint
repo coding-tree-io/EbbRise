@@ -169,6 +169,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> block-input;
     in-out property <bool> daily-limit;
     in-out property <int> daily-limit-hours;
+    in-out property <int> daily-limit-repeat;
     // Sounds
     in property <[string]> sounds;
     in-out property <int> mini-start;
@@ -185,6 +186,7 @@ export component SettingsWindow inherits Window {
     callback play(int);
     callback open-audio-folder();
     callback open-logs();
+    callback check-for-updates();
     callback restore-defaults();
     // The title bar must follow a Windows theme switch while the window is open.
     callback dark-mode-changed(bool);
@@ -650,13 +652,26 @@ export component SettingsWindow inherits Window {
                 }
                 Row {
                     title: "After";
-                    last: true;
                     Stepper {
                         label: "hours of use per day";
                         unit: "h";
                         minimum: 1;
                         maximum: 16;
                         value <=> root.daily-limit-hours;
+                        changed => { root.changed(); }
+                    }
+                }
+                Row {
+                    title: "Remind again after";
+                    hint: "More use before the notice comes back";
+                    last: true;
+                    Stepper {
+                        label: "minutes of use before the notice comes back";
+                        unit: "min";
+                        minimum: 5;
+                        maximum: 240;
+                        step: 5;
+                        value <=> root.daily-limit-repeat;
                         changed => { root.changed(); }
                     }
                 }
@@ -699,6 +714,11 @@ export component SettingsWindow inherits Window {
             HorizontalLayout {
                 spacing: 12px;
                 alignment: start;
+                PillButton {
+                    text: "Check for updates";
+                    compact: true;
+                    clicked => { root.check-for-updates(); }
+                }
                 PillButton {
                     text: "Open logs folder";
                     compact: true;

@@ -29,6 +29,8 @@ pub struct UsageForm {
     pub daily_limit: bool,
     /// Hours of active time per day.
     pub daily_limit_hours: i64,
+    /// Minutes of more active time before the daily-limit notice comes back.
+    pub daily_limit_repeat_minutes: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,6 +120,7 @@ impl SettingsForm {
                 block_input: s.block_input_during_breaks,
                 daily_limit: s.daily_limit,
                 daily_limit_hours: (s.daily_limit_time / HOUR).max(1),
+                daily_limit_repeat_minutes: (s.daily_limit_postpone_time / MINUTE).max(1),
             },
             sounds,
             sound_choice,
@@ -193,6 +196,9 @@ impl SettingsForm {
         s.daily_limit = self.usage.daily_limit;
         if self.usage.daily_limit_hours != before.usage.daily_limit_hours {
             s.daily_limit_time = self.usage.daily_limit_hours * HOUR;
+        }
+        if self.usage.daily_limit_repeat_minutes != before.usage.daily_limit_repeat_minutes {
+            s.daily_limit_postpone_time = self.usage.daily_limit_repeat_minutes * MINUTE;
         }
         apply_mini(&self.mini, &before.mini, &mut s);
         apply_long(&self.long, &before.long, &mut s);
@@ -302,12 +308,14 @@ mod tests {
         form.long.length = 7;
         form.sound_choice[1] = 1;
         form.volume = 45;
+        form.usage.daily_limit_repeat_minutes = 35;
         form.theme = 2;
         form.language = LANGUAGES.iter().position(|(c, _)| *c == "el").unwrap();
         let s = form.apply(&base);
         assert_eq!(s.mini_break_interval, 25 * MINUTE);
         assert_eq!(s.long_break_every, 45 * MINUTE);
         assert_eq!(s.long_break_duration, 7 * MINUTE);
+        assert_eq!(s.daily_limit_postpone_time, 35 * MINUTE);
         assert_eq!(s.mini_break_audio, "wind-chime");
         assert_eq!((s.volume, s.language.as_str()), (0.45, "el"));
         assert_eq!(s.theme_source, "dark");

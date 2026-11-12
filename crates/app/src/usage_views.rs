@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tracing::{info, warn};
 
 use crate::break_window::BreakView;
-use crate::logic::{BreakButton, DailyLimitScreen, DayStatistics, Environment};
+use crate::logic::{DailyLimitScreen, DayStatistics, Environment};
 use crate::storage::app_folder;
 use crate::{App, statistics_store, with_app};
 
@@ -64,11 +64,10 @@ impl App {
 
     pub(crate) fn open_daily_limit(&mut self, limit: DailyLimitScreen) {
         self.close_daily_limit();
-        let on_button = |button| {
+        // "Got it" is the only button; the notice comes back after the postpone time.
+        let on_button = |_| {
             with_app(move |app| {
-                let effects = app
-                    .core
-                    .on_daily_limit(button == BreakButton::Postpone, platform::awake_ms());
+                let effects = app.core.on_daily_limit(true, platform::awake_ms());
                 app.carry_out(effects);
                 app.save_statistics();
                 app.rearm_timer_and_refresh_tray();

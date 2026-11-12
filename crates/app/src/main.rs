@@ -254,6 +254,9 @@ impl App {
     }
 
     fn refresh_break(&mut self) {
+        if self.core.watch_break_activity(awake_ms(), idle_ms()) {
+            self.rearm_timer_and_refresh_tray();
+        }
         if let (Some(view), Some(time)) = (&self.break_view, self.core.break_time(awake_ms())) {
             view.refresh(self.core.words(), &time);
             if time.awaiting_finish {
@@ -265,17 +268,13 @@ impl App {
 
     fn on_menu(&mut self, action: MenuAction) {
         info!(?action, "menu");
-        if action == MenuAction::DownloadUpdate {
-            return open_in_shell(update::RELEASES);
-        }
-        if action == MenuAction::Preferences {
-            return self.open_settings();
-        }
-        if action == MenuAction::Statistics {
-            return self.open_statistics();
-        }
-        if action == MenuAction::CheckForUpdates {
-            return update::check_now();
+        match action {
+            MenuAction::DownloadUpdate => return open_in_shell(update::RELEASES),
+            MenuAction::Preferences => return self.open_settings(),
+            MenuAction::About => return self.open_about(),
+            MenuAction::Statistics => return self.open_statistics(),
+            MenuAction::CheckForUpdates => return update::check_now(),
+            _ => {}
         }
         if action == MenuAction::Quit {
             if self.core.may_quit() {

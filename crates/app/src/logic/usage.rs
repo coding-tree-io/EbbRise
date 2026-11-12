@@ -218,13 +218,14 @@ impl Core {
                 kind: "Daily limit".to_owned(),
                 headline: "Daily limit reached".to_owned(),
                 detail: format!(
-                    "You have used the PC for {} today. Time to stop for the day.",
+                    "You have used the PC for {} today. Time to stop for the day. This notice comes back after {postpone_minutes} more minutes of use.",
                     words.duration(self.usage.active_today(now))
                 ),
                 source: String::new(),
-                postpone: format!("Postpone {postpone_minutes} min"),
-                skip: "Done for today".to_owned(),
-                finish: String::new(),
+                postpone: String::new(),
+                skip: String::new(),
+                // A notice only: acknowledging it is the one thing the window can do.
+                finish: "Got it".to_owned(),
             },
             number: format!("{} h", (hours * 10.0).round() / 10.0),
             caption: "today".to_owned(),
@@ -235,7 +236,8 @@ impl Core {
         std::mem::take(&mut self.usage.limit_shown).then_some(Effect::CloseDailyLimit)
     }
 
-    /// A daily-limit window button: Postpone, or "Done for today" (`postpone` false).
+    /// "Got it" on the daily-limit notice (`postpone` true): it comes back after the postpone time.
+    /// `postpone` false stops it for today.
     pub fn on_daily_limit(&mut self, postpone: bool, now: i64) -> Vec<Effect> {
         let Some(close) = self.close_daily_limit() else {
             return Vec::new();

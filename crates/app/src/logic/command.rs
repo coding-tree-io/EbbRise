@@ -62,6 +62,7 @@ impl Core {
             MenuAction::Resume
             | MenuAction::Preferences
             | MenuAction::Statistics
+            | MenuAction::About
             | MenuAction::DownloadUpdate
             | MenuAction::CheckForUpdates
             | MenuAction::Quit => {}

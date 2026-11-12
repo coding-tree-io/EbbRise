@@ -21,6 +21,8 @@ pub enum MenuAction {
     Preferences,
     /// Open the Statistics window.
     Statistics,
+    /// Open the settings window at its About page.
+    About,
     /// Open the latest release page (upstream's "Download latest version").
     DownloadUpdate,
     /// Check for a newer release now and report the result.
@@ -43,6 +45,7 @@ impl MenuAction {
             Self::Reset => "reset",
             Self::Preferences => "preferences",
             Self::Statistics => "statistics",
+            Self::About => "about",
             Self::DownloadUpdate => "download-update",
             Self::CheckForUpdates => "check-updates",
             Self::Quit => "quit",
@@ -63,6 +66,7 @@ impl MenuAction {
             Self::Reset,
             Self::Preferences,
             Self::Statistics,
+            Self::About,
             Self::DownloadUpdate,
             Self::CheckForUpdates,
             Self::Quit,
@@ -146,7 +150,7 @@ pub(super) fn tray_menu(planner: &BreaksPlanner, words: &Translator, now: i64) -
 
 /// The entries at the end of every tray menu. Statistics and the update check have no
 /// translations yet.
-fn app_entries(words: &Translator) -> [MenuEntry; 4] {
+fn app_entries(words: &Translator) -> [MenuEntry; 5] {
     let english = |action, label: &str| MenuEntry::Item {
         label: label.to_owned(),
         action,
@@ -159,6 +163,7 @@ fn app_entries(words: &Translator) -> [MenuEntry; 4] {
         english(MenuAction::Statistics, "Statistics"),
         english(MenuAction::CheckForUpdates, "Check for updates"),
         item(MenuAction::Preferences, "main.preferences"),
+        item(MenuAction::About, "preferences.nav.about"),
         item(MenuAction::Quit, "main.quitStretchly"),
     ]
 }
@@ -224,6 +229,7 @@ mod tests {
                 "Statistics",
                 "Check for updates",
                 "Preferences",
+                "About",
                 "Quit EbbRise",
             ]
         );
@@ -238,6 +244,7 @@ mod tests {
                 "Statistics",
                 "Check for updates",
                 "Preferences",
+                "About",
                 "Quit EbbRise"
             ]
         );
@@ -268,6 +275,7 @@ mod tests {
             MenuAction::Reset,
             MenuAction::Preferences,
             MenuAction::Statistics,
+            MenuAction::About,
             MenuAction::DownloadUpdate,
             MenuAction::CheckForUpdates,
             MenuAction::Quit,

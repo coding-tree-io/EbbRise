@@ -8,9 +8,6 @@ use super::{SILENCE, Toast};
 
 /// The start sound when a break starts, and the end sound when it ends on time.
 pub(super) fn sound(s: &Settings, event: &Event, on_time: bool) -> Option<String> {
-    if s.silent_notifications {
-        return None;
-    }
     let name = match event {
         Event::StartMiniBreak => &s.mini_break_start_sound,
         Event::StartLongBreak => &s.long_break_start_sound,

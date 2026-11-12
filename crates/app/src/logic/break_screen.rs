@@ -58,7 +58,8 @@ impl BreakScreen {
 }
 
 /// The number in the ring and the break length under it: "7" and "20 seconds",
-/// or "3:12" and "5 minutes" once the break is a minute or longer.
+/// or "3:12" and "5 minutes" once the break is a minute or longer. While use of the PC holds
+/// the countdown, the caption says so.
 pub fn countdown(words: &Translator, time: &BreakTime) -> (String, String) {
     let left = (time.remaining + 999) / 1000;
     let length = time.length / 1000;
@@ -67,7 +68,9 @@ pub fn countdown(words: &Translator, time: &BreakTime) -> (String, String) {
     } else {
         left.to_string()
     };
-    let caption = if length >= 60 && length % 60 == 0 {
+    let caption = if time.activity_paused {
+        "paused while active".to_owned()
+    } else if length >= 60 && length % 60 == 0 {
         words.count("utils.minutes", (length / 60) as u64)
     } else {
         words.count("utils.seconds", length as u64)
@@ -114,6 +117,7 @@ mod tests {
         BreakTime {
             long: false,
             remaining,
+            activity_paused: false,
             length,
             may_postpone: false,
             may_skip: true,
@@ -133,6 +137,14 @@ mod tests {
             ("3:12".into(), "5 minutes".into())
         );
         assert_eq!(countdown(&words, &time(0, 90_000)).1, "90 seconds");
+        let held = BreakTime {
+            activity_paused: true,
+            ..time(6_200, 20_000)
+        };
+        assert_eq!(
+            countdown(&words, &held),
+            ("7".into(), "paused while active".into())
+        );
     }
 
     #[test]

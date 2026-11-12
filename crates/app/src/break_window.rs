@@ -61,12 +61,13 @@ impl BreakView {
         }
     }
 
-    /// Shows a still ring with `number` and `caption`, no water, the words at once, and the
-    /// Postpone and Skip buttons (the daily-limit reminder).
+    /// Shows a still ring with `number` and `caption`, no water, the words at once, and only
+    /// the Finish button, which the daily-limit notice labels "Got it".
     pub fn show_still(&self, number: &str, caption: &str) {
         let full = BreakTime {
             long: false,
             remaining: 1,
+            activity_paused: false,
             length: 1,
             may_postpone: true,
             may_skip: true,
@@ -78,9 +79,9 @@ impl BreakView {
             window.set_ring(ring_commands(&full).into());
             window.set_passed(0.0);
             window.set_idea_shown(true);
-            window.set_show_postpone(true);
-            window.set_show_skip(true);
-            window.set_show_finish(false);
+            window.set_show_postpone(false);
+            window.set_show_skip(false);
+            window.set_show_finish(true);
         }
     }
 

@@ -6,6 +6,16 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+### Changed
+
+- **Break countdown pauses while you use the PC:** mouse or keyboard input during a break holds the countdown. It continues from the same time after 2 s without input, and the ring says "paused while active".
+- **Daily limit is a notice:** the screen keeps the EbbRise look but offers only "Got it". It comes back after more use, and its text says when. Settings → Activity → "Remind again after" sets that time (5–240 min, default 20). "Postpone" and "Done for today" are gone.
+- **About** is in the tray menu. The About page has a **Check for updates** button.
+
+### Fixed
+
+- Break start and end sounds play even when `silentNotifications` is on (often carried over from Stretchly). That setting now mutes notifications only.
+
 ## [0.6.0] - 2026-11-11
 
 One clear choice for time away from the PC, and fixes that keep settings, pauses and statistics safe.

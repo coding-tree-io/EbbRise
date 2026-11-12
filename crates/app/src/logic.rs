@@ -146,6 +146,8 @@ impl Core {
     ) -> Vec<Effect> {
         match signal {
             Signal::Timer => {
+                // Input just before the break's end holds it before the end step runs.
+                self.planner.break_activity(now, idle);
                 let mut effects = self.track_usage(now, idle, os);
                 for event in self.planner.idle(now, idle) {
                     effects.extend(self.carry_out(event, true));
@@ -244,6 +246,11 @@ impl Core {
     /// The running break for the break window; `None` outside a break.
     pub fn break_time(&self, now: i64) -> Option<BreakTime> {
         self.planner.break_time(now)
+    }
+
+    /// Holds or resumes the running countdown based on time since input, in ms.
+    pub fn watch_break_activity(&mut self, now: i64, idle: i64) -> bool {
+        self.planner.break_activity(now, idle)
     }
 
     /// A break window button. Skip ends the break without its end sound, as upstream.
@@ -910,13 +917,33 @@ Next Long break in about 2 minutes"
             ]
         );
 
-        // "silence" and silent notifications play nothing.
+        // "silence" plays nothing; silent notifications do not mute break sounds.
         let mut quiet = Sim::new(r#","miniBreakAudio":"silence""#);
         quiet.run_until(41_000);
         assert!(quiet.sounds.is_empty(), "{:?}", quiet.sounds);
         let mut silent = Sim::new(&format!("{sounds},\"silentNotifications\":true"));
         silent.run_until(41_000);
-        assert!(silent.sounds.is_empty());
+        assert_eq!(silent.sounds, sim.sounds);
+    }
+
+    #[test]
+    fn break_activity_holds_and_reschedules_the_timer() {
+        let mut sim = Sim::new("");
+        sim.run_until(30_000);
+        assert!(sim.core.watch_break_activity(31_000, 0));
+        sim.now = 40_000;
+        sim.signal(Signal::Timer);
+        assert!(sim.window_open);
+        assert_eq!(sim.core.break_time(sim.now).unwrap().remaining, 9_000);
+        sim.away_since = Some(40_000);
+        sim.now = 42_000;
+        assert!(sim.core.watch_break_activity(sim.now, sim.idle()));
+        sim.now = 50_999;
+        sim.signal(Signal::Timer);
+        assert!(sim.window_open);
+        sim.now = 51_000;
+        sim.signal(Signal::Timer);
+        assert!(!sim.window_open);
     }
 
     #[test]

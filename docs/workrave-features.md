@@ -35,10 +35,9 @@ Setting `countActiveTimeOnly`, off by default.
 Settings `dailyLimit` (off by default), `dailyLimitTime` (4 h of active time), `dailyLimitPostponeTime` (20 min).
 
 - EbbRise counts active time per day. A day starts at 04:00 local time, so late-night work counts towards the day before.
-- When the active time reaches the limit, EbbRise shows a reminder (decision D3). It has two actions:
-  - **Postpone:** the reminder comes again after `dailyLimitPostponeTime` more of active time.
-  - **Done for today:** no more reminders until the next day starts.
-- The window stays until the user picks an action.
+- When the active time reaches the limit, EbbRise shows a notice in the break window style (decision D3). It cannot stop the user, so it offers no actions that look like they do something: only **Got it**.
+- After Got it, the notice comes again after `dailyLimitPostponeTime` more of active time. Its text says so. Settings → Activity → "Remind again after" sets it.
+- The window stays until the user presses Got it.
 - Pause, Do Not Disturb and app exclusions hold the reminder, as they hold breaks.
 
 ## 3. Statistics
