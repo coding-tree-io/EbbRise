@@ -6,6 +6,10 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-13
+
+Breaks that wait for real rest, a daily limit that only informs, and About one click from the tray.
+
 ### Changed
 
 - **Break countdown pauses while you use the PC:** mouse or keyboard input during a break holds the countdown. It continues from the same time after 2 s without input, and the ring says "paused while active".
@@ -101,6 +105,7 @@ New features from Workrave, written from a clean-room spec. All but statistics a
 
 First release of EbbRise: break reminders for Windows 10 and 11, a native Rust and Slint port of Stretchly. Stretchly settings are imported on the first start.
 
+[0.7.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.7.0
 [0.6.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.6.0
 [0.5.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.5.0
 [0.4.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.4.0
