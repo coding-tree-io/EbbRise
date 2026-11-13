@@ -6,6 +6,10 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-13
+
+Breaks count down again with a game controller connected.
+
 ### Fixed
 
 - Game controllers and other devices no longer count as using the PC; only keyboard and mouse input do. This fixes break countdowns never starting with a PS4 controller connected.
@@ -109,6 +113,7 @@ New features from Workrave, written from a clean-room spec. All but statistics a
 
 First release of EbbRise: break reminders for Windows 10 and 11, a native Rust and Slint port of Stretchly. Stretchly settings are imported on the first start.
 
+[0.7.1]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.7.1
 [0.7.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.7.0
 [0.6.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.6.0
 [0.5.0]: https://github.com/coding-tree-io/EbbRise/releases/tag/v0.5.0
