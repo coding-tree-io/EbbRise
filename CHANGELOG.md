@@ -6,6 +6,10 @@ New texts are in English only until translations catch up.
 
 ## [Unreleased]
 
+### Fixed
+
+- Game controllers and other devices no longer count as using the PC; only keyboard and mouse input do. This fixes break countdowns never starting with a PS4 controller connected.
+
 ## [0.7.0] - 2026-11-13
 
 Breaks that wait for real rest, a daily limit that only informs, and About one click from the tray.

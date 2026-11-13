@@ -3,16 +3,20 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use platform::{Signal, SignalWindow, awake_ms, idle_ms};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
+    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, MOUSEEVENTF_MOVE,
+    MOUSEINPUT, SendInput, VK_F24,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 type Received = Rc<RefCell<Vec<(Signal, Instant)>>>;
+// Raw Input has one target window per device class in a process.
+static SIGNAL_WINDOW: Mutex<()> = Mutex::new(());
 
 #[test]
 fn display_inventory_contains_primary_and_cursor() {
@@ -50,6 +54,7 @@ fn pump(time: Duration) {
 
 #[test]
 fn os_messages_become_signals_and_other_values_are_ignored() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
     let (signals, received) = signal_window();
     let window = signals.window();
     assert!(
@@ -94,6 +99,7 @@ fn os_messages_become_signals_and_other_values_are_ignored() {
 
 #[test]
 fn armed_timer_fires_once_near_its_delay() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
     let (signals, received) = signal_window();
     let armed = Instant::now();
     signals.arm(50, 0);
@@ -110,6 +116,7 @@ fn armed_timer_fires_once_near_its_delay() {
 
 #[test]
 fn disarmed_timer_never_fires() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
     let (signals, received) = signal_window();
     signals.arm(30, 0);
     signals.disarm();
@@ -119,10 +126,13 @@ fn disarmed_timer_never_fires() {
 
 #[test]
 fn clocks_follow_real_time_and_real_input() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
+    let (_signals, _) = signal_window();
     let start = awake_ms();
-    std::thread::sleep(Duration::from_millis(100));
+    pump(Duration::from_millis(100));
     let passed = awake_ms() - start;
     assert!((90..200).contains(&passed), "{passed} ms");
+    assert!(idle_ms() >= 80, "idle clock advanced: {} ms", idle_ms());
 
     // A zero-distance mouse move counts as input but moves nothing.
     let input = INPUT {
@@ -136,7 +146,25 @@ fn clocks_follow_real_time_and_real_input() {
     };
     // SAFETY: one valid INPUT with its correct size.
     assert_eq!(unsafe { SendInput(&[input], size_of::<INPUT>() as i32) }, 1);
+    pump(Duration::from_millis(10));
     assert!(idle_ms() < 50, "idle reset by input: {} ms", idle_ms());
+
+    pump(Duration::from_millis(100));
+    assert!(idle_ms() >= 80, "idle clock advanced: {} ms", idle_ms());
+    let input = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VK_F24,
+                dwFlags: KEYEVENTF_KEYUP,
+                ..Default::default()
+            },
+        },
+    };
+    // SAFETY: one valid INPUT with its correct size.
+    assert_eq!(unsafe { SendInput(&[input], size_of::<INPUT>() as i32) }, 1);
+    pump(Duration::from_millis(10));
+    assert!(idle_ms() < 50, "idle reset by key: {} ms", idle_ms());
 }
 
 #[test]
@@ -177,6 +205,7 @@ fn second_process_sends_commands() {
 
 #[test]
 fn command_from_another_process_arrives_as_a_signal() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
     let (signals, received) = signal_window();
     let mut second = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "second_process_sends_commands"])
@@ -209,6 +238,7 @@ fn command_from_another_process_arrives_as_a_signal() {
 
 #[test]
 fn a_signal_during_the_handler_waits_for_it_instead_of_reentering() {
+    let _guard = SIGNAL_WINDOW.lock().unwrap();
     let window = Rc::new(std::cell::Cell::new(HWND::default()));
     let order = Rc::new(RefCell::new(Vec::new()));
     let (handler_window, handler_order) = (window.clone(), order.clone());

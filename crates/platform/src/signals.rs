@@ -103,6 +103,7 @@ impl SignalWindow {
             WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION)?;
             RegisterSuspendResumeNotification(HANDLE(window.0), DEVICE_NOTIFY_WINDOW_HANDLE)?;
         }
+        crate::clock::register_input(window);
         let focus_assist = focus_assist::subscribe(window);
         Ok(Self {
             window,
@@ -200,6 +201,10 @@ unsafe extern "system" fn window_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     let signal = match message {
+        WM_INPUT => {
+            crate::clock::record_input();
+            None
+        }
         WM_TIMER if wparam.0 == TIMER_ID => {
             // One-shot: the handler re-arms for the next deadline.
             // SAFETY: `window` is the window this procedure was called for.
